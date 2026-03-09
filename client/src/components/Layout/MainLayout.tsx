@@ -25,6 +25,7 @@ import SettingsDialog from '../Dialogs/SettingsDialog';
 import AuditLogDialog from '../Dialogs/AuditLogDialog';
 import KeychainDialog from '../Dialogs/KeychainDialog';
 import ConnectionAuditLogDialog from '../Dialogs/ConnectionAuditLogDialog';
+import UserProfileDialog from '../Dialogs/UserProfileDialog';
 
 import TenantSwitcher from './TenantSwitcher';
 import NotificationBell from './NotificationBell';
@@ -98,6 +99,7 @@ export default function MainLayout() {
   const [auditLogOpen, setAuditLogOpen] = useState(false);
   const [keychainOpen, setKeychainOpen] = useState(false);
   const [connectionAuditTarget, setConnectionAuditTarget] = useState<{ id: string; name: string } | null>(null);
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [linkedProvider, setLinkedProvider] = useState<string | null>(() => {
     const linked = new URLSearchParams(window.location.search).get('linked');
     if (linked) window.history.replaceState({}, '', '/');
@@ -338,6 +340,7 @@ export default function MainLayout() {
         onClose={() => { setSettingsOpen(false); setLinkedProvider(null); }}
         initialTab={settingsInitialTab}
         linkedProvider={linkedProvider}
+        onViewUserProfile={(uid) => setProfileUserId(uid)}
       />
       <AuditLogDialog
         open={auditLogOpen}
@@ -352,6 +355,11 @@ export default function MainLayout() {
         onClose={() => setConnectionAuditTarget(null)}
         connectionId={connectionAuditTarget?.id ?? ''}
         connectionName={connectionAuditTarget?.name ?? ''}
+      />
+      <UserProfileDialog
+        open={!!profileUserId}
+        onClose={() => setProfileUserId(null)}
+        userId={profileUserId}
       />
     </>
   );

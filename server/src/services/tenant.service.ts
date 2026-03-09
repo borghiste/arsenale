@@ -231,6 +231,74 @@ export async function listTenantUsers(tenantId: string) {
     });
 }
 
+export async function getUserProfile(
+  tenantId: string,
+  targetUserId: string,
+  viewerRole?: 'OWNER' | 'ADMIN' | 'MEMBER',
+) {
+  const membership = await prisma.tenantMember.findUnique({
+    where: { tenantId_userId: { tenantId, userId: targetUserId } },
+    include: {
+      user: {
+        select: {
+          id: true,
+          username: true,
+          avatarData: true,
+          createdAt: true,
+          updatedAt: true,
+          email: true,
+          totpEnabled: true,
+          smsMfaEnabled: true,
+          webauthnEnabled: true,
+          teamMembers: {
+            include: {
+              team: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!membership) {
+    throw new AppError('User not found in this organization', 404);
+  }
+
+  const isAdmin = viewerRole === 'OWNER' || viewerRole === 'ADMIN';
+
+  // Public fields — always returned
+  const profile: Record<string, unknown> = {
+    id: membership.user.id,
+    username: membership.user.username,
+    avatarData: membership.user.avatarData,
+    role: membership.role,
+    joinedAt: membership.joinedAt,
+    teams: membership.user.teamMembers.map((tm) => ({
+      id: tm.team.id,
+      name: tm.team.name,
+      role: tm.role,
+    })),
+  };
+
+  // Admin-only fields
+  if (isAdmin) {
+    profile.email = membership.user.email;
+    profile.totpEnabled = membership.user.totpEnabled;
+    profile.smsMfaEnabled = membership.user.smsMfaEnabled;
+    profile.webauthnEnabled = membership.user.webauthnEnabled;
+    profile.updatedAt = membership.user.updatedAt;
+
+    const lastLog = await prisma.auditLog.findFirst({
+      where: { userId: targetUserId },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    profile.lastActivity = lastLog?.createdAt ?? null;
+  }
+
+  return profile;
+}
+
 export async function inviteUser(tenantId: string, email: string, role: 'ADMIN' | 'MEMBER') {
   const targetUser = await prisma.user.findUnique({ where: { email } });
   if (!targetUser) {

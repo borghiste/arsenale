@@ -67,9 +67,10 @@ interface SettingsDialogProps {
   onClose: () => void;
   initialTab?: string;
   linkedProvider?: string | null;
+  onViewUserProfile?: (userId: string) => void;
 }
 
-export default function SettingsDialog({ open, onClose, initialTab, linkedProvider }: SettingsDialogProps) {
+export default function SettingsDialog({ open, onClose, initialTab, linkedProvider, onViewUserProfile }: SettingsDialogProps) {
   const user = useAuthStore((s) => s.user);
   const [hasPassword, setHasPassword] = useState(true);
 
@@ -196,7 +197,7 @@ export default function SettingsDialog({ open, onClose, initialTab, linkedProvid
             </Stack>
           )}
           {resolvedTab === 'organization' && (
-            <TenantSection onNavigateToTab={setActiveTab} />
+            <TenantSection onNavigateToTab={setActiveTab} onViewUserProfile={onViewUserProfile} />
           )}
           {resolvedTab === 'teams' && (
             <TeamSection onNavigateToTab={setActiveTab} />
@@ -208,7 +209,7 @@ export default function SettingsDialog({ open, onClose, initialTab, linkedProvid
             <Stack spacing={3}>
               <SelfSignupSection />
               <EmailProviderSection />
-              <TenantAuditLogSection />
+              <TenantAuditLogSection onViewUserProfile={onViewUserProfile} />
             </Stack>
           )}
         </Box>

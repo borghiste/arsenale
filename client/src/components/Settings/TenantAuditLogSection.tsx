@@ -43,7 +43,11 @@ function exportCsv(logs: TenantAuditLogEntry[]) {
   URL.revokeObjectURL(url);
 }
 
-export default function TenantAuditLogSection() {
+interface TenantAuditLogSectionProps {
+  onViewUserProfile?: (userId: string) => void;
+}
+
+export default function TenantAuditLogSection({ onViewUserProfile }: TenantAuditLogSectionProps) {
   const tenantAuditLogAction = useUiPreferencesStore((s) => s.tenantAuditLogAction);
   const tenantAuditLogSearch = useUiPreferencesStore((s) => s.tenantAuditLogSearch);
   const tenantAuditLogTargetType = useUiPreferencesStore((s) => s.tenantAuditLogTargetType);
@@ -313,7 +317,13 @@ export default function TenantAuditLogSection() {
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           {new Date(log.createdAt).toLocaleString()}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                        <TableCell
+                          sx={{
+                            whiteSpace: 'nowrap',
+                            ...(onViewUserProfile && log.userId ? { cursor: 'pointer', '&:hover': { textDecoration: 'underline' } } : {}),
+                          }}
+                          onClick={() => log.userId && onViewUserProfile?.(log.userId)}
+                        >
                           {log.userName ?? log.userEmail ?? '\u2014'}
                         </TableCell>
                         <TableCell>

@@ -142,6 +142,21 @@ export async function listUsers(req: AuthRequest, res: Response, next: NextFunct
   }
 }
 
+export async function getUserProfile(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = z.string().uuid().parse(req.params.userId);
+    const result = await tenantService.getUserProfile(
+      req.params.id as string,
+      userId,
+      req.user!.tenantRole as 'OWNER' | 'ADMIN' | 'MEMBER' | undefined,
+    );
+    res.json(result);
+  } catch (err) {
+    if (err instanceof z.ZodError) return next(new AppError('Invalid user ID', 400));
+    next(err);
+  }
+}
+
 export async function inviteUser(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { email, role } = inviteUserSchema.parse(req.body);

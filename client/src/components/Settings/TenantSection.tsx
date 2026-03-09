@@ -19,9 +19,10 @@ const TENANT_ROLES = ['OWNER', 'ADMIN', 'MEMBER'] as const;
 
 interface TenantSectionProps {
   onNavigateToTab?: (tabId: string) => void;
+  onViewUserProfile?: (userId: string) => void;
 }
 
-export default function TenantSection({ onNavigateToTab }: TenantSectionProps) {
+export default function TenantSection({ onNavigateToTab, onViewUserProfile }: TenantSectionProps) {
   const user = useAuthStore((s) => s.user);
   const tenant = useTenantStore((s) => s.tenant);
   const users = useTenantStore((s) => s.users);
@@ -603,7 +604,10 @@ export default function TenantSection({ onNavigateToTab }: TenantSectionProps) {
                 <TableBody>
                   {users.map((u) => (
                     <TableRow key={u.id} sx={u.enabled === false ? { opacity: 0.5 } : undefined}>
-                      <TableCell>
+                      <TableCell
+                        sx={{ cursor: onViewUserProfile ? 'pointer' : undefined }}
+                        onClick={() => onViewUserProfile?.(u.id)}
+                      >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Avatar src={u.avatarData || undefined} sx={{ width: 28, height: 28 }}>
                             {(u.username || u.email).charAt(0).toUpperCase()}

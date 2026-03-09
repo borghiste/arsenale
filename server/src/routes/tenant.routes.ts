@@ -26,6 +26,7 @@ router.get('/:id/mfa-stats', requireTenant, requireOwnTenant, requireTenantRole(
 
 // User management within tenant
 router.get('/:id/users', requireTenant, requireOwnTenant, tenantController.listUsers);
+router.get('/:id/users/:userId/profile', requireTenant, requireOwnTenant, tenantController.getUserProfile);
 router.post('/:id/invite', requireTenant, requireOwnTenant, requireTenantRole('ADMIN'), tenantController.inviteUser);
 router.put('/:id/users/:userId', requireTenant, requireOwnTenant, requireTenantRole('ADMIN'), tenantController.updateUserRole);
 router.delete('/:id/users/:userId', requireTenant, requireOwnTenant, requireTenantRole('ADMIN'), tenantController.removeUser);

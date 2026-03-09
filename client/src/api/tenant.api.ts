@@ -92,6 +92,27 @@ export async function deleteTenant(id: string): Promise<{ deleted: boolean }> {
   return res.data;
 }
 
+export interface UserProfileData {
+  id: string;
+  username: string | null;
+  avatarData: string | null;
+  role: string;
+  joinedAt: string;
+  teams: { id: string; name: string; role: string }[];
+  // Admin-only fields (present only for OWNER/ADMIN viewers)
+  email?: string;
+  totpEnabled?: boolean;
+  smsMfaEnabled?: boolean;
+  webauthnEnabled?: boolean;
+  updatedAt?: string;
+  lastActivity?: string | null;
+}
+
+export async function getUserProfile(tenantId: string, userId: string): Promise<UserProfileData> {
+  const res = await api.get(`/tenants/${tenantId}/users/${userId}/profile`);
+  return res.data;
+}
+
 export async function listTenantUsers(tenantId: string): Promise<TenantUser[]> {
   const res = await api.get(`/tenants/${tenantId}/users`);
   return res.data;
