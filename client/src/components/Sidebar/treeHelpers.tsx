@@ -6,6 +6,7 @@ import {
 import {
   Computer as RdpIcon,
   Terminal as SshIcon,
+  DesktopWindows as VncIcon,
   Folder as FolderIcon,
   FolderOpen as FolderOpenIcon,
   ExpandMore,
@@ -208,10 +209,12 @@ export function ConnectionItem({ conn, depth, compact, draggable = false, onEdit
         {...(draggable ? { ...listeners, ...attributes } : {})}
       >
         <ListItemIcon sx={{ minWidth: compact ? 24 : 32 }}>
-          {conn.type === 'RDP' ? (
-            <RdpIcon fontSize="small" color="primary" />
-          ) : (
+          {conn.type === 'SSH' ? (
             <SshIcon fontSize="small" color="secondary" />
+          ) : conn.type === 'VNC' ? (
+            <VncIcon fontSize="small" color="info" />
+          ) : (
+            <RdpIcon fontSize="small" color="primary" />
           )}
         </ListItemIcon>
         <ListItemText

@@ -33,7 +33,7 @@ export function forceDisconnectSession(session: {
     }
   }
 
-  if (session.protocol === 'RDP') {
+  if (session.protocol === 'RDP' || session.protocol === 'VNC') {
     emitSessionTerminated(session.userId, session.id, 'admin_terminated');
   }
 }

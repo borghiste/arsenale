@@ -1,0 +1,20 @@
+import { Command } from 'commander';
+import { registerHealthCommands } from './commands/health.commands';
+import { registerDbCommands } from './commands/db.commands';
+import { registerUserCommands } from './commands/user.commands';
+import { registerTenantCommands } from './commands/tenant.commands';
+import { registerAuditCommands } from './commands/audit.commands';
+import { registerGatewayCommands } from './commands/gateway.commands';
+import { registerSessionCommands } from './commands/session.commands';
+import { registerConfigCommands } from './commands/config.commands';
+
+export function registerCommands(program: Command): void {
+  registerHealthCommands(program);
+  registerDbCommands(program);
+  registerUserCommands(program);
+  registerTenantCommands(program);
+  registerAuditCommands(program);
+  registerGatewayCommands(program);
+  registerSessionCommands(program);
+  registerConfigCommands(program);
+}

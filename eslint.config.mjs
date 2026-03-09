@@ -48,6 +48,7 @@ export default tseslint.config(
   // ── Server-specific rules ──────────────────────────────────────
   {
     files: ["server/src/**/*.ts"],
+    ignores: ["server/src/cli.ts", "server/src/cli/**/*.ts"],
     rules: {
       // Server has a logger utility — discourage raw console usage
       "no-console": "warn",

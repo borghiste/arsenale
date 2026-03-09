@@ -1,0 +1,1310 @@
+================================================================================
+  REMOTE DESKTOP MANAGER — TASK LIST
+  Formato: [CODICE] [STATO] — Titolo
+  Stati: [ ] Da fare | [~] In corso | [x] Completato | [!] Bloccato
+  Note: I task completati sono in done.txt, quelli in corso in progressing.txt
+================================================================================
+
+
+================================================================================
+  SEZIONE A — TASK RICHIESTI (Core Features)
+================================================================================
+
+
+
+
+
+================================================================================
+  SEZIONE B — TASK AGGIUNTIVI SUGGERITI
+================================================================================
+
+
+
+
+
+
+
+
+================================================================================
+  SEZIONE C — MULTI-TENANT / TEAMS / PERMESSI
+================================================================================
+
+
+
+
+
+
+================================================================================
+  SEZIONE D — MULTI-BACKEND / MULTI-GATEWAY
+================================================================================
+
+
+
+================================================================================
+  SEZIONE E — ZERO TRUST HARDENING
+================================================================================
+
+
+------------------------------------------------------------------------------
+  TIER 1 — Baseline obbligatorio
+------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+------------------------------------------------------------------------------
+  TIER 2 — Core Zero Trust
+------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+================================================================================
+  SEZIONE F — PASSWORD KEYCHAIN / SECRET VAULT
+================================================================================
+
+
+
+
+
+
+
+
+
+================================================================================
+  SEZIONE G — GATEWAY ORCHESTRATION / AUTO-SCALING
+================================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+================================================================================
+  SEZIONE H — SCOUTED FEATURES (2026-03-02)
+================================================================================
+
+
+
+
+------------------------------------------------------------------------------
+[ ] REC-070 — Registrazione e riproduzione sessioni SSH e RDP
+------------------------------------------------------------------------------
+  Priorita: MEDIA
+  Dipendenze: ORCH-060 (session tracking)
+
+  DESCRIZIONE:
+  Registrare le sessioni SSH e RDP per compliance, formazione e audit
+  avanzato. Per le sessioni RDP, Guacamole supporta la registrazione
+  nativa server-side tramite parametri nel token (recording-path,
+  recording-name). Per SSH, i dati del terminale possono essere catturati
+  come stream I/O con timestamp (formato asciinema/asciicast v2) e
+  riprodotti in-browser con xterm.js. Le registrazioni creano una traccia
+  di audit immutabile, complementare ai log testuali gia' esistenti.
+  Questa e' una delle funzionalita' enterprise piu' richieste (presente
+  in Devolutions RDM, Teleport, HashiCorp Boundary).
+
+  DETTAGLI TECNICI:
+  Prisma (server/prisma/schema.prisma):
+    - Nuovo modello SessionRecording:
+        model SessionRecording {
+          id              String   @id @default(uuid())
+          userId          String
+          connectionId    String
+          protocol        String   // SSH | RDP | VNC
+          filePath        String   // percorso file registrazione
+          fileSize        Int?
+          duration        Int?     // durata in secondi
+          format          String   // 'asciicast' | 'guac' | 'webm'
+          status          String   @default("RECORDING") // RECORDING | COMPLETE | ERROR
+          createdAt       DateTime @default(now())
+          completedAt     DateTime?
+
+          user       User       @relation(fields: [userId], references: [id])
+          connection Connection @relation(fields: [connectionId], references: [id])
+
+          @@index([userId])
+          @@index([connectionId])
+          @@index([createdAt])
+        }
+    - Aggiungere relazioni in User e Connection
+    - Aggiungere AuditAction: SESSION_RECORD_START, SESSION_RECORD_VIEW
+    - Eseguire migrazione Prisma
+
+  Backend — RDP recording:
+    - vnc/rdp.service.ts: aggiungere parametri Guacamole al token:
+      recording-path: /recordings/{userId}/{sessionId}
+      recording-name: {timestamp}.guac
+      recording-include-keys: true (opzionale, per keystroke logging)
+    - Il file .guac viene scritto da guacd nella directory configurata
+    - Post-sessione: convertire .guac in .webm con guac-encode (o servire
+      direttamente il formato Guacamole per il player nativo)
+
+  Backend — SSH recording:
+    - In ssh.handler.ts: intercettare i dati del canale SSH (stream.on
+      'data') e scrivere ogni chunk con timestamp nel formato asciicast v2
+      (JSON Lines: {"version":2,"width":W,"height":H} header + [time,
+      "o", data] events)
+    - Salvare il file .cast nella directory configurata
+    - Aggiornare metadata nel DB alla fine della sessione
+
+  Backend — Storage e API:
+    - Creare server/src/services/recording.service.ts:
+      - startRecording(), completeRecording(), getRecording(),
+        listRecordings(), deleteRecording(), streamRecordingFile()
+    - Directory configurabile via env var RECORDING_PATH (default
+      ./recordings/)
+    - API: GET /api/recordings (lista), GET /api/recordings/:id/stream
+      (download/stream file), DELETE /api/recordings/:id
+    - Policy: recording obbligatorio/opzionale configurabile per tenant
+
+  Frontend:
+    - Creare player SSH: componente xterm.js in modalita' replay che
+      legge il file .cast e riproduce i dati con timing originale
+      (play/pause/seek/speed controls)
+    - Creare player RDP: componente video HTML5 per .webm, oppure
+      integrare guacamole-common-js session player per formato .guac
+    - RecordingsPage o sezione in Settings/Administration: lista
+      registrazioni con filtri (utente, connessione, data), play inline,
+      download
+
+  File coinvolti:
+    MODIFICARE: server/prisma/schema.prisma (SessionRecording, AuditAction)
+    CREARE:     server/src/services/recording.service.ts
+    CREARE:     server/src/routes/recording.routes.ts
+    CREARE:     server/src/controllers/recording.controller.ts
+    MODIFICARE: server/src/socket/ssh.handler.ts (cattura stream I/O)
+    MODIFICARE: server/src/services/rdp.service.ts (parametri recording)
+    MODIFICARE: server/src/config.ts (RECORDING_PATH, recording policy)
+    CREARE:     client/src/components/Recording/SshPlayer.tsx
+    CREARE:     client/src/components/Recording/RdpPlayer.tsx
+    CREARE:     client/src/api/recordings.api.ts
+    MODIFICARE: server/src/app.ts (mount recording routes)
+
+
+------------------------------------------------------------------------------
+[ ] IO-071 — Import/export connessioni (CSV, JSON, mRemoteNG, file RDP)
+------------------------------------------------------------------------------
+  Priorita: MEDIA
+  Dipendenze: Nessuna
+
+  DESCRIZIONE:
+  Permettere l'importazione e l'esportazione delle connessioni in diversi
+  formati per facilitare la migrazione da altri strumenti e il backup.
+  Formati supportati in export: CSV e JSON. Formati supportati in import:
+  CSV (con mapping colonne), JSON, XML mRemoteNG, e file .rdp standard.
+  L'export puo' opzionalmente includere le credenziali (richiede vault
+  sbloccata e conferma esplicita). L'import cifra automaticamente le
+  credenziali importate con la vault key dell'utente.
+  Tutti i principali competitor (mRemoteNG, Royal TS, Devolutions RDM)
+  supportano import/export.
+
+  DETTAGLI TECNICI:
+  Backend:
+    - Creare server/src/services/importExport.service.ts:
+      - exportConnections(userId, format, options): decifra credenziali
+        se richiesto, genera CSV o JSON
+      - importConnectionsFromCsv(userId, csvData, columnMapping):
+        parsing con mapping colonne, validazione, cifratura credenziali
+      - importConnectionsFromJson(userId, jsonData): validazione schema,
+        cifratura
+      - importConnectionsFromMremoteng(userId, xmlData): parsing XML
+        mRemoteNG (confCons.xml), mapping campi (Name, Hostname, Port,
+        Protocol, Username, Password, Description, Panel→Folder)
+      - importConnectionsFromRdp(userId, rdpFileContent): parsing formato
+        .rdp (key:type:value), estrazione full address, username, ecc.
+      - Duplicate detection: confronto per host+port+type, opzione skip/
+        overwrite/rename
+    - Creare controller e routes:
+      - POST /api/connections/export (body: { format, includeCredentials })
+      - POST /api/connections/import (multipart/form-data, file + options)
+      - Proteggere con authenticate, vault unlock required per credentials
+
+  Frontend:
+    - Creare client/src/components/Dialogs/ImportDialog.tsx:
+      - Step 1: file upload (drag & drop, accept .csv, .json, .xml, .rdp)
+      - Step 2: formato auto-detect + preview dati
+      - Step 3: per CSV, mapping colonne (dropdown per ogni colonna)
+      - Step 4: duplicate handling (skip/overwrite/rename)
+      - Step 5: risultato con conteggio importati/skippati/errori
+    - Creare client/src/components/Dialogs/ExportDialog.tsx:
+      - Selezione formato (CSV/JSON)
+      - Toggle "Include credentials" (warning di sicurezza)
+      - Selezione scope (tutte, cartella specifica, selezione)
+    - Aggiungere bottoni Import/Export nel context menu sidebar o settings
+    - Creare client/src/api/importExport.api.ts
+
+  File coinvolti:
+    CREARE:     server/src/services/importExport.service.ts
+    CREARE:     server/src/controllers/importExport.controller.ts
+    CREARE:     server/src/routes/importExport.routes.ts
+    MODIFICARE: server/src/app.ts (mount import/export routes)
+    CREARE:     client/src/components/Dialogs/ImportDialog.tsx
+    CREARE:     client/src/components/Dialogs/ExportDialog.tsx
+    CREARE:     client/src/api/importExport.api.ts
+    MODIFICARE: client/src/components/Sidebar/ConnectionTree.tsx (bottoni)
+
+
+------------------------------------------------------------------------------
+[ ] UX-072 — Indicatore raggiungibilita' connessioni nella sidebar
+------------------------------------------------------------------------------
+  Priorita: BASSA
+  Dipendenze: Nessuna
+
+  DESCRIZIONE:
+  Mostrare un indicatore visivo (pallino verde/rosso/grigio) accanto a
+  ogni connessione nella sidebar per indicare se l'host target e'
+  raggiungibile. Utilizza probe TCP periodici riutilizzando l'utility
+  tcpProbe.ts gia' sviluppata per il monitoraggio gateway (GATE-067).
+  L'indicatore da' visibilita' immediata sullo stato delle macchine
+  prima di tentare una connessione. Configurabile per tenant (on/off,
+  intervallo). I risultati vengono trasmessi via Socket.IO per
+  aggiornamenti in tempo reale. Rispetta i confini di rete: se una
+  connessione ha un gateway assegnato, il probe viene effettuato
+  attraverso il gateway (SSH probe via bastion, TCP diretto per guacd).
+
+  DETTAGLI TECNICI:
+  Backend:
+    - Creare server/src/services/connectionMonitor.service.ts:
+      - startMonitoring(connections[]): avvia probe periodici per le
+        connessioni dell'utente (interval configurabile, default 60s)
+      - stopMonitoring(userId): ferma i probe
+      - probeConnection(connection): TCP probe verso host:port, timeout 5s
+        - Se connessione ha gateway SSH_BASTION/MANAGED_SSH: eseguire
+          il probe dal server (il target e' raggiungibile solo via gateway)
+        - Se connessione ha gateway GUACD: TCP probe diretto (il server
+          deve raggiungere l'host)
+      - Risultato: { connectionId, status: 'online'|'offline'|'unknown',
+        latencyMs, checkedAt }
+    - Socket.IO namespace /connection-monitor:
+      - Broadcast stato a user room quando cambia
+      - Client si connette al login, riceve aggiornamenti
+    - Endpoint opzionale: POST /api/connections/:id/probe (probe singolo
+      on-demand)
+    - Configurazione tenant: monitoringEnabled, monitorIntervalSeconds
+      (da aggiungere a Tenant o come setting separato)
+
+  Frontend:
+    - Estendere ConnectionTree.tsx:
+      - Piccolo pallino colorato (8px) prima del nome connessione:
+        verde = online, rosso = offline, grigio = unknown/disabled
+      - Tooltip con latenza e ultimo check
+    - Creare client/src/hooks/useConnectionMonitor.ts:
+      - Connessione al namespace Socket.IO /connection-monitor
+      - Stato locale: Map<connectionId, { status, latencyMs, checkedAt }>
+    - Estendere connectionsStore.ts o creare store dedicato:
+      - connectionHealth: Record<string, HealthStatus>
+      - updateConnectionHealth action
+    - uiPreferencesStore: toggle per mostrare/nascondere indicatori
+    - Riutilizzare server/src/utils/tcpProbe.ts (gia' esistente)
+
+  File coinvolti:
+    CREARE:     server/src/services/connectionMonitor.service.ts
+    CREARE:     server/src/socket/connectionMonitor.handler.ts
+    CREARE:     client/src/hooks/useConnectionMonitor.ts
+    MODIFICARE: server/src/socket/index.ts (setup handler)
+    MODIFICARE: server/src/index.ts (avvio monitor)
+    MODIFICARE: client/src/components/Sidebar/ConnectionTree.tsx (indicatore)
+    MODIFICARE: client/src/components/Layout/MainLayout.tsx (hook)
+    MODIFICARE: client/src/store/uiPreferencesStore.ts (toggle)
+
+
+================================================================================
+  SEZIONE I — SSO & DOMAIN CREDENTIAL PASSTHROUGH (Scouted 2026-03-02)
+================================================================================
+
+
+
+
+
+
+================================================================================
+  ORDINE DI IMPLEMENTAZIONE CONSIGLIATO
+================================================================================
+
+  Fase 1 — Quick wins e prerequisiti:
+    1. UI-002   Spostare bottone nuova connessione              [COMPLETATO]
+    2. FOLD-001 Gestione cartelle UI (backend gia' pronto)      [COMPLETATO]
+    3. EDIT-008 Verificare/completare modifica connessioni      [COMPLETATO]
+
+  Fase 2 — Context menu completo + clipboard:
+    4. SHR-005   Condivisione dal context menu                  [COMPLETATO]
+    5. CLIP-017  Clipboard RDP e SSH (quick win, solo frontend) [COMPLETATO]
+    6. USER-007  Pannello utente (necessario per CRED-006)      [COMPLETATO]
+    7. CRED-006  Connessione con credenziali alternative        [COMPLETATO]
+
+  Fase 3 — Miglioramenti UX:
+    8. SEARCH-009  Barra di ricerca                             [COMPLETATO]
+    9. THEME-011   Tema scuro/chiaro                            [COMPLETATO]
+   10. FAVS-014    Preferiti e recenti                          [COMPLETATO]
+   11. RDPFS-018   Drive redirection RDP (file transfer)        [COMPLETATO]
+   12. SSHUI-027   Personalizzazione terminale SSH (font, temi, opzioni) [COMPLETATO]
+   12b. SSHUI-028  Sync automatico tema terminale SSH con tema WebUI     [COMPLETATO]
+   13. RDPSET-028  Personalizzazione sessioni RDP (qualita', risoluzione) [COMPLETATO]
+   14. SFTP-019    Trasferimento file SFTP (SSH)                         [COMPLETATO]
+
+  Fase 4 — Sicurezza e amministrazione:
+   15. 2FA-012     Autenticazione due fattori                           [COMPLETATO]
+   16. EMAIL-030   Verifica email alla registrazione                    [COMPLETATO]
+   17. OAUTH-029   Autenticazione OAuth (Google, Microsoft, GitHub)    [COMPLETATO]
+   18. AUDIT-013   Log attivita'                                      [COMPLETATO]
+   19. NOTIF-015   Notifiche condivisione                               [COMPLETATO]
+   20. DND-010     Drag and drop                                          [COMPLETATO]
+
+  Fase 5 — Quality gate e preparazione OSS:
+   21. SAST-031    SAST e code verification tools + check post-task       [COMPLETATO]
+   22. OSS-032     Preparare repository per pubblicazione open-source     [COMPLETATO]
+
+  Fase 6 — Multi-tenant e team:
+   23. TENANT-020  Schema multi-tenant (modelli Prisma)                   [COMPLETATO]
+   24. TENANT-021  Backend CRUD tenant + onboarding                          [COMPLETATO]
+   25. TEAM-022    Backend CRUD team + vault team                                [COMPLETATO]
+   26. PERM-023    Ownership connessioni + permessi team                          [COMPLETATO]
+   27. DISC-024    Ricerca utenti per condivisione (parallelizzabile con 25)       [COMPLETATO]
+   28. UI-025      Frontend tenant/team/sidebar                                        [COMPLETATO]
+   29. GUARD-026   Middleware sicurezza + test isolamento                                  [COMPLETATO]
+
+  Fase 7 — Comunicazioni cloud:
+   30. CLOUD-033  Integrazione provider email cloud (alternativa a SMTP)    [COMPLETATO]
+   31. SMS-034   Autenticazione MFA via SMS                                      [COMPLETATO]
+   32. OIDC-035  Supporto provider OAuth2/OIDC generico (Authentik, Keycloak, etc.)  [COMPLETATO]
+
+  Fase 8 — Multi-backend / Multi-gateway:
+   33. GATE-036  Modello Gateway e CRUD backend (Prisma + API)                         [COMPLETATO]
+   34. GATE-037  Routing RDP tramite gateway guacd dinamico                             [COMPLETATO]
+   35. GATE-038  Routing SSH tramite bastion/jump host (parallelizzabile con 34)  [COMPLETATO]
+   36. GATE-039  Frontend gestione gateway e assegnazione connessioni              [COMPLETATO]
+
+  Fase 8b — UX refactoring:
+   37. UI-046    Refactoring Settings page: tabbed category layout              [COMPLETATO]
+   37b. TABS-047  Persistenza automatica tab aperti (server-side, cross-device)  [COMPLETATO]
+   37c. FOLD-048  Context menu cartelle: Share Folder e Open All Connections     [COMPLETATO]
+
+  Fase 8c — SSH Gateway gestito (container managed):
+   38. SSHGW-049  Container image SSH Gateway (Alpine + OpenSSH, CI/CD)       [IN CORSO]
+   39. SSHGW-050  Generazione e gestione chiavi SSH server-side
+   40. SSHGW-051  Integrazione gateway managed nel backend (MANAGED_SSH + key auth)
+   41. SSHGW-052  Frontend gateway SSH gestito: UI, status e configurazione  [COMPLETATO]
+   42. SSHGW-053  Push chiave pubblica SSH al gateway tramite HTTP sidecar  [COMPLETATO]
+   42b. SSHGW-066  Rotazione automatica chiave SSH tenant (nightly cron)  [COMPLETATO]
+
+  Fase 8d — Password Keychain / Secret Vault:
+   43. VAULT-053  Modelli Prisma e servizio CRUD backend secrets  [COMPLETATO]
+   44. VAULT-054  API routes, controller e sharing secrets  [COMPLETATO]
+   45. VAULT-055  Integrazione backend connessioni con vault secrets  [COMPLETATO]
+   46. VAULT-056  Frontend pagina Keychain, store e componenti  [COMPLETATO]
+   47. VAULT-057  Integrazione frontend ConnectionDialog con secret picker  [COMPLETATO]
+   48. VAULT-058  External sharing: link temporanei condivisione esterna  [COMPLETATO]
+   49. VAULT-059  Secret versioning UI, scadenza alert, audit migliorato  [COMPLETATO]
+
+  Fase 8e — Gateway Orchestration e Auto-Scaling:
+   50. ORCH-060  Session tracking persistente e monitoraggio sessioni attive  [COMPLETATO]
+   51. ORCH-061  Cleanup sessioni inattive con timeout configurabile  [COMPLETATO]
+   52. ORCH-062  Container orchestrator abstraction layer (Docker + K8s)  [COMPLETATO]
+   53. ORCH-063  Deploy e lifecycle management gateway containers  [COMPLETATO]
+   54. ORCH-064  Auto-scaling gateway basato su sessioni attive  [COMPLETATO]
+   55. ORCH-065  Frontend dashboard sessioni, scaling controls, monitoring  [COMPLETATO]
+
+  Fase 9 — Zero Trust hardening (Tier 1, priorita' alta):
+   56. ZT-036   Security headers (helmet middleware)
+   57. ZT-037   Rate limiting login e account lockout
+   58. ZT-038   Audit sessioni SSH/RDP (session start/end)         [COMPLETATO]
+   59. ZT-039   Audit tentativi di login falliti
+   60. ZT-040   Lock vault al logout
+
+  Fase 10 — Zero Trust hardening (Tier 2, core ZT):
+   61. ZT-041   Policy MFA obbligatorio a livello tenant           [COMPLETATO]
+   62. ZT-042   Rotazione refresh token                                   [COMPLETATO]
+   63. ZT-043   Fix validazione certificato RDP (default ignoreCert)
+   64. ZT-044   Cifratura TOTP secret a riposo                       [COMPLETATO]
+   65. ZT-045   Vista audit log per admin tenant                     [IN CORSO]
+
+  Fase 11 — SSO & Domain Credential Passthrough:
+   66. SSO-073  RDP domain field: schema, dialogs, Guacamole token  [COMPLETATO]
+   67. SSO-074  SAML 2.0 SSO authentication via Passport.js  [COMPLETATO]
+   68. SSO-075  User domain credential profile (domain identity)  [COMPLETATO]
+   69. SSO-076  Credential passthrough: domain profile to connections  [COMPLETATO]
+
+================================================================================
+  NOTE
+================================================================================
+  - CRED-006 richiede modifiche sia frontend che backend
+  - USER-007 e' il task piu' grande: richiede nuovo layer backend completo
+  - Il cambio password (USER-007) e' critico: deve ri-cifrare la vault key
+  - SFTP-019 usa client.sftp() di ssh2 (gia' installato), nessun nuovo pacchetto
+  - TENANT-020 aggiunge colonne nullable: backward compatible con utenti esistenti
+  - TEAM-022 richiede vault sbloccato per aggiungere membri (re-cifratura team key)
+  - PERM-023 introduce 3 scope connessioni: private, team, shared
+  - GUARD-026 e' critico per sicurezza: garantisce isolamento cross-tenant totale
+  - DISC-024 migliora UX condivisione: ricerca utenti per nome/email nel tenant
+  - La condivisione cross-tenant e' VIETATA per design
+  - SSHUI-027 ha due livelli: default globali (User.sshDefaults via Settings page)
+    e override per connessione (Connection.sshTerminalConfig via ConnectionDialog)
+  - SSHUI-027 dipende da USER-007 per la pagina impostazioni account
+  - RDPSET-028 ha due livelli: default globali (User.rdpDefaults via Settings page)
+    e override per connessione (Connection.rdpSettings via ConnectionDialog)
+  - RDPSET-028 dipende da USER-007 per la pagina impostazioni account
+  - RDPSET-028 include preset qualita' (Performance/Balanced/Quality/Custom)
+    per semplificare la scelta; il preset "Custom" mostra tutti i parametri
+  - RDPSET-028 espone parametri Guacamole: color-depth, risoluzione, DPI,
+    performance flags, audio, security, keyboard layout, console, timezone
+  - EMAIL-030 introduce nodemailer come prima infrastruttura email del progetto
+  - EMAIL-030 blocca il login finche' l'email non e' verificata; utenti esistenti
+    migrati come emailVerified=true
+  - EMAIL-030 in dev: se SMTP non configurato, il link di verifica viene loggato
+    in console (nessun servizio esterno richiesto per sviluppo locale)
+  - OAUTH-029 usa Passport.js con Authorization Code flow (server-side)
+  - OAUTH-029 utenti OAuth devono impostare una vault password separata al primo
+    login (stesse garanzie crittografiche degli utenti LOCAL)
+  - OAUTH-029 passwordHash diventa nullable: utenti OAuth-only non hanno password
+    di login, solo vault password per cifrare le credenziali
+  - OAUTH-029 TOTP (2FA-012) NON richiesto per login OAuth: il provider gestisce
+    il suo 2FA. Richiesto solo per login email/password.
+  - SAST-031 e' trasversale: una volta implementato, "npm run verify" diventa
+    step obbligatorio alla fine di OGNI task futuro prima di marcarlo completato
+  - SAST-031 non ha dipendenze: puo' essere implementato immediatamente
+  - SAST-031 copre: ESLint (sicurezza), TypeScript strict, Semgrep (SAST),
+    npm audit (dipendenze), build verification
+  - OSS-032 non ha dipendenze funzionali ma va fatto prima del primo release pubblico
+  - OSS-032 licenza scelta: GPL v3 (copyleft, derivati devono essere open-source)
+  - OSS-032 i file task tracker (to-do.txt, progressing.txt, done.txt) vanno rimossi
+    o aggiunti a .gitignore prima della pubblicazione (contengono note interne)
+  - OSS-032 README.md gia' buono (176 righe), serve aggiungere badge e sezioni
+    Contributing/License
+  - CLOUD-033 dipende da EMAIL-030: rifattorizza il servizio email esistente
+    (nodemailer) dietro un'interfaccia astratta EmailProvider
+  - CLOUD-033 provider supportati: SendGrid, Amazon SES, Resend, Mailgun
+  - CLOUD-033 backward compatible: se EMAIL_PROVIDER non impostato, usa SMTP
+  - SMS-034 dipende da 2FA-012: estende il flusso MFA esistente con opzione SMS
+  - SMS-034 richiede rate limiting severo per prevenire abusi (ogni SMS ha un costo)
+  - SMS-034 provider supportati: Twilio, AWS SNS, Vonage
+  - SMS-034 l'utente puo' avere TOTP e SMS attivi contemporaneamente
+  - OIDC-035 dipende da OAUTH-029: estende l'infrastruttura Passport.js esistente
+  - OIDC-035 usa OIDC Discovery per risolvere automaticamente gli endpoint dall'issuer URL
+  - OIDC-035 richiede migrazione Prisma per aggiungere OIDC all'enum AuthProvider
+  - OIDC-035 singolo provider generico via env vars; multi-provider via admin UI e' estensione futura
+  - OIDC-035 compatibile con qualsiasi IdP OIDC-compliant: Authentik, Keycloak, Authelia, Zitadel, etc.
+  - GATE-036 dipende da TENANT-020 e GUARD-026: i gateway sono tenant-scoped
+  - GATE-036 credenziali cifrate solo per SSH_BASTION (nullable per GUACD)
+  - GATE-036 un gateway default per tipo (GUACD/SSH_BASTION) per tenant
+  - GATE-036 endpoint DELETE fallisce se connessioni referenziano il gateway
+  - GATE-037 scoperta chiave: guacamole-lite supporta gia' routing dinamico
+    per-connessione via guacdHost/guacdPort nel token cifrato
+  - GATE-037 nessuna istanza GuacamoleLite aggiuntiva necessaria: un solo
+    server WebSocket (porta 3002) instrada verso guacd diversi
+  - GATE-037 backward compatible: senza gateway = guacd da GUACD_HOST/GUACD_PORT
+  - GATE-038 usa SSH2 client.forwardOut() per creare tunnel TCP attraverso
+    il bastion, poi secondo SSH2 Client sullo stream forwarded
+  - GATE-038 cleanup: chiudere entrambi i client SSH (bastion + target) a fine sessione
+  - GATE-038 SFTP funziona automaticamente sullo stesso client SSH2
+  - GATE-039 dropdown gateway nel ConnectionDialog filtrato per tipo connessione
+    (GUACD per RDP, SSH_BASTION per SSH)
+  - GATE-039 opzione "Nessuno (connessione diretta)" come default nel dropdown
+  - ZT-036 non ha dipendenze: puo' essere implementato immediatamente
+  - ZT-037 puo' riutilizzare il pattern di smsRateLimit.middleware.ts (express-rate-limit)
+  - ZT-038 richiede migrazione Prisma per nuovi valori enum AuditAction
+  - ZT-039 richiede migrazione Prisma per LOGIN_FAILURE nell'enum AuditAction
+  - ZT-039 nota: login falliti non hanno userId valido, gestire con userId nullable
+  - ZT-040 e' un fix semplice: aggiungere una chiamata lockVault() in logout()
+  - ZT-041 dipende da 2FA-012 e TENANT-020: estende il modello Tenant con mfaRequired
+  - ZT-041 utenti senza MFA in un tenant con policy attiva vengono forzati al setup MFA
+  - ZT-042 implementa token rotation + reuse detection (famiglia di token)
+  - ZT-042 richiede aggiornamento anche del client Axios interceptor
+  - ZT-043 e' un cambio di default: da ignoreCert=true a ignoreCert=false
+  - ZT-043 connessioni con certificati self-signed possono fare override individualmente
+  - ZT-044 richiede vault sbloccata per operazioni TOTP (enable, verify, login)
+  - ZT-044 richiede script di migrazione per re-cifrare segreti TOTP esistenti
+  - ZT-045 nuovo endpoint /api/audit/tenant protetto da requireTenantRole('ADMIN')
+  - ZT-045 permette a OWNER/ADMIN di vedere i log di tutti gli utenti del tenant
+  - SSHUI-028 aggiunge solo un campo boolean + due preset al JSON esistente,
+    nessuna migrazione Prisma necessaria
+  - SSHUI-028 il sync e' opzionale (default off): comportamento attuale invariato
+  - SSHUI-028 l'utente puo' scegliere quale preset light e dark usare per il sync
+  - UI-046 e' un refactoring puramente frontend, nessuna modifica backend
+  - UI-046 estrae 4 componenti dalla JSX inline di SettingsPage e riutilizza
+    i 6 componenti sezione gia' esistenti senza modifiche
+  - UI-046 il tab Administration e' visibile solo a OWNER/ADMIN del tenant
+  - UI-046 il tab attivo e' persistito in uiPreferencesStore + URL ?tab= param
+  - UI-046 responsive: su schermi < 768px, tab orizzontali in alto
+  - TABS-047 persistenza server-side (DB), non localStorage: i tab si ripristinano
+    su qualsiasi dispositivo dopo il login
+  - TABS-047 nuovo modello OpenTab in Prisma con @@unique([userId, connectionId])
+  - TABS-047 esclude tab con credenziali override (Connect As) dalla persistenza
+    per ragioni di sicurezza
+  - TABS-047 al restore NON registra le connessioni come "recenti" (non e' un'apertura
+    volontaria)
+  - TABS-047 il restore avviene dopo fetchConnections() per validare che le
+    connessioni esistano ancora e l'utente abbia ancora accesso
+  - TABS-047 sync debounced (~1s) per batchare cambiamenti rapidi (apertura/chiusura
+    multipla di tab) in una singola PUT
+  - TABS-047 al logout i tab vengono svuotati (clearAll) per evitare cross-user leakage
+  - FOLD-048 "Share Folder" e' batch share di connessioni (non condivisione
+    della cartella come entita'): il modello SharedConnection resta invariato
+  - FOLD-048 la condivisione cartella e' ricorsiva (include sottocartelle)
+  - FOLD-048 "Open All" chiede all'utente se includere sottocartelle quando presenti
+  - FOLD-048 "Open All" mostra conferma se > 5 connessioni
+  - FOLD-048 batch share limitato a 50 connessioni per richiesta
+  - FOLD-048 richiede migrazione Prisma per BATCH_SHARE nell'enum AuditAction
+  - SSHGW-049 e' un container indipendente, non richiede codice nel server
+  - SSHGW-049 il container usa solo port forwarding TCP, nessun accesso shell
+  - SSHGW-049 la directory ssh-gateway/ e' un nuovo workspace root-level
+    (non un npm workspace — solo Dockerfile + config)
+  - SSHGW-050 la chiave privata SSH e' cifrata con SERVER_ENCRYPTION_KEY (env var),
+    NON con la vault utente — il server deve decifrare autonomamente durante
+    le connessioni SSH senza richiedere vault unlock
+  - SSHGW-050 ogni tenant ha una sola coppia di chiavi (1:1 Tenant→SshKeyPair)
+  - SSHGW-050 rotazione chiave richiede aggiornamento manuale dei container
+    gateway (nuova chiave pubblica da iniettare)
+  - SSHGW-051 aggiunge MANAGED_SSH all'enum GatewayType: richiede migrazione Prisma
+  - SSHGW-051 per MANAGED_SSH: username fisso "tunnel", auth via privateKey,
+    nessuna credenziale dal vault utente
+  - SSHGW-051 backward compatible: SSH_BASTION funziona come prima con password
+  - SSHGW-051 ssh2 supporta nativamente privateKey nel metodo connect()
+  - SSHGW-052 la sezione SSH Key Pair e' visibile solo a OWNER/ADMIN del tenant
+  - SSHGW-052 il dropdown gateway nel ConnectionDialog filtra MANAGED_SSH
+    e SSH_BASTION per connessioni SSH (entrambi validi)
+  - SSHGW-052 nessuna nuova pagina/route: la gestione keypair vive nella
+    pagina /settings/gateways esistente
+  - SSHGW-053 e' indipendente dai task di orchestrazione (ORCH-060+)
+  - SSHGW-053 il sidecar HTTP nel container gateway e' protetto da shared
+    secret token (GATEWAY_API_TOKEN), ogni richiesta richiede Bearer token
+  - SSHGW-053 il server HTTP sidecar gira sulla porta 8022, non esposta
+    all'host in produzione (solo rete interna Docker)
+  - SSHGW-053 endpoint POST /authorized-keys sovrascrive authorized_keys,
+    GET /authorized-keys verifica le chiavi attualmente configurate
+  - SSHGW-053 GATEWAY_API_TOKEN deve essere una stringa random crittografica
+    (64 caratteri hex), condivisa tra .env del server e del container gateway
+  - SSHGW-066 usa node-cron (non setInterval) per espressioni cron standard
+  - SSHGW-066 il cron e' configurabile via KEY_ROTATION_CRON; default 02:00 UTC
+  - SSHGW-066 advance days = 7: una chiave che scade il 15/03 viene ruotata
+    entro il 08/03, garantendo zero interruzioni
+  - SSHGW-066 expiresAt null = chiave senza scadenza, non viene mai auto-ruotata
+  - SSHGW-066 autoRotateEnabled default false: backward compatible, nessun
+    tenant esistente viene ruotato automaticamente senza opt-in esplicito
+  - SSHGW-066 il push ai gateway e' best-effort: se un gateway non risponde,
+    la rotazione non viene annullata (logged and continued)
+  - SSHGW-066 audit action dedicata SSH_KEY_AUTO_ROTATE distingue rotazione
+    automatica da manuale (SSH_KEY_ROTATE)
+  - SSHGW-066 nessuna modifica frontend: la task e' backend-only, API-first
+  - SSHGW-066 l'admin configura la policy via PATCH /ssh-keypair/rotation
+    (curl o futuro UI), la rotazione avviene senza intervento
+  - VAULT-053 il tenant key segue lo stesso pattern esatto del team key:
+    AES-256 random, cifrato per-membro con master key, cached in memory con TTL
+  - VAULT-053 i secrets usano un singolo blob JSON cifrato (encryptedData) invece
+    di colonne separate per campo — supporta tipi diversi senza schema changes
+  - VAULT-053 ogni update crea una VaultSecretVersion con snapshot cifrato
+  - VAULT-054 lo sharing secrets riusa l'enum Permission (READ_ONLY/FULL_ACCESS)
+    e il pattern decrypt->re-encrypt identico a SharedConnection
+  - VAULT-054 la distribuzione tenant key richiede che entrambi i vault
+    (distributor e target) siano unlocked, come per le team key
+  - VAULT-055 credentialSecretId e' nullable con onDelete: SetNull — se il
+    secret viene eliminato, la connessione torna a credenziali inline
+  - VAULT-055 backward compatible: connessioni senza credentialSecretId
+    funzionano esattamente come prima
+  - VAULT-055 per SSH_KEY: ssh2 supporta nativamente privateKey nel connect()
+  - VAULT-055 per RDP: solo secrets tipo LOGIN sono compatibili
+  - VAULT-056 file upload per SSH_KEY e CERTIFICATE accetta .pem, .key, .crt, .pub
+  - VAULT-056 campi sensibili auto-hide dopo 30 secondi dal reveal
+  - VAULT-057 il SecretPicker filtra per tipo compatibile in base al tipo connessione
+  - VAULT-058 zero-knowledge: il token e' la chiave, il DB salva solo SHA-256(token)
+  - VAULT-058 con PIN: chiave = Argon2id(token+pin, salt) — secondo fattore
+  - VAULT-058 senza PIN: chiave = HKDF(token) — URL alone grants access
+  - VAULT-058 endpoint pubblico /api/share/:token NON ha authenticate middleware
+  - VAULT-058 cleanup automatico shares scaduti via cron job
+  - VAULT-059 cron job scadenza ogni 6 ore, notifiche per fasce (30/7/1/0 giorni)
+  - VAULT-059 evita notifiche duplicate controllando le ultime 24h
+  - ORCH-060 sostituisce e amplia ZT-038: il session tracking persistente copre
+    sia il requisito di audit sessioni che la base per auto-scaling
+  - ORCH-060 il heartbeat client SSH usa Socket.IO events (gia' connesso),
+    il heartbeat RDP usa REST API (no socket server-side per RDP)
+  - ORCH-060 metadata della sessione (host, port, gateway) sono salvati come Json
+    per flessibilita', non come colonne separate
+  - ORCH-060 guacToken e' l'hash SHA-256 del token Guacamole, per evitare di
+    salvare in chiaro credenziali embedded nel token
+  - ORCH-061 il cleanup SSH disconnette il socket forzatamente, attivando la
+    cleanup chain esistente in ssh.handler.ts (stream.close -> client.end)
+  - ORCH-061 il cleanup RDP marca solo il DB perche' il traffico RDP e' gestito
+    da guacamole-lite (nessun socket server-side da chiudere)
+  - ORCH-061 il cron job gira ogni 60 secondi; il timeout minimo e' 60 secondi
+  - ORCH-062 Docker provider: updateContainerEnv() per SSH gateways usa
+    docker exec invece di recreate per aggiornare authorized_keys senza downtime
+  - ORCH-062 Kubernetes provider: updateContainerEnv() patcha il Deployment env,
+    K8s gestisce il rolling restart automaticamente
+  - ORCH-062 NoneProvider non lancia errori per listContainers/getStatus (returns
+    empty), lancia solo per deployContainer/removeContainer
+  - ORCH-062 auto-detection: K8s ha priorita' su Docker perche' un pod Docker
+    in K8s ha accesso a entrambi, ma l'approccio K8s-native e' preferibile
+  - ORCH-063 scale-down preferisce rimuovere istanze senza sessioni attive;
+    non forza mai la disconnessione degli utenti
+  - ORCH-063 key rotation push: Docker usa exec asincrono, K8s usa patch + rolling
+    update; in entrambi i casi la propagazione non e' istantanea
+  - ORCH-063 health check: 3 check unhealthy consecutivi prima di restart per
+    evitare riavvii durante deploy (container in fase di avvio)
+  - ORCH-063 reconcileAll() e' il safety net: se un container viene rimosso
+    manualmente, il reconcile lo rileva e ne crea uno nuovo
+  - ORCH-064 scale-up immediato, scale-down con cooldown minimo 60 secondi
+  - ORCH-064 se tutte le istanze hanno sessioni attive e il target richiede
+    scale-down, il sistema attende senza forzare disconnessioni
+  - ORCH-064 la valutazione usa ceil(): con 11 sessioni e threshold 10,
+    target = 2 istanze
+  - ORCH-064 maxReplicas capped a 20 per tenant per evitare esaurimento risorse
+  - ORCH-065 polling ogni 10 secondi per la dashboard; non usa WebSocket per
+    semplicita' (i dati non sono real-time critico)
+  - ORCH-065 tab "Orchestration" visibile solo a OWNER/ADMIN del tenant
+  - ORCH-065 GatewayDialog diventa significativamente piu' complesso con i
+    controlli managed/scaling; considerare split in sotto-componenti
+  - SSO-073 il parametro domain Guacamole e' nativo: basta aggiungere
+    settings.domain nel token cifrato (stessa logica di username/password)
+  - SSO-073 il domain e' cifrato a riposo come username/password (AES-256-GCM)
+  - SSO-073 per SSH, il formato domain\username e' supportato solo da Windows
+    OpenSSH; non prependere su target Linux
+  - SSO-074 SAML usa POST per l'ACS callback (non GET come OAuth) — richiede
+    express.urlencoded() scoped solo sulla route SAML
+  - SSO-074 il verify callback SAML ha firma diversa da OAuth: (profile, done)
+    vs (accessToken, refreshToken, profile, done) — creare callback dedicato
+  - SSO-074 compatibile con: Azure AD/Entra, Okta, OneLogin, ADFS, FreeIPA
+    (via Ipsilon), Keycloak, Authentik, e qualsiasi IdP SAML 2.0
+  - SSO-074 FreeIPA puo' anche usare OIDC-035 via Keycloak federato — due
+    percorsi di integrazione possibili senza LDAP diretto
+  - SSO-074 richiede migrazione Prisma per aggiungere SAML all'enum AuthProvider
+  - SSO-075 la password domain e' cifrata con la vault master key (stesso
+    pattern di connection credentials) — vault deve essere unlocked
+  - SSO-075 se l'utente cambia vault password, la domain password deve essere
+    ri-cifrata nella stessa transazione (aggiungere a changePassword flow)
+  - SSO-075 auto-inferenza: SAML UPN john@contoso.com -> domain=CONTOSO,
+    username=john; email fallback con stesso algoritmo
+  - SSO-075 domainAutoInferred=true solo al primo login SAML; non sovrascrive
+    configurazione manuale dell'utente
+  - SSO-076 il quick-connect (doppio click) su connessione con
+    defaultCredentialMode='domain' bypassa il ConnectAsDialog
+  - SSO-076 defaultCredentialMode='prompt' forza sempre l'apertura del dialog
+  - SSO-076 audit: aggiungere credentialSource ('saved'|'domain'|'manual')
+    nei details di SESSION_START per tracciabilita' admin
+
+
+================================================================================
+  SEZIONE D — INTEGRAZIONI INFRASTRUTTURA OSS (Scouted 2026-03-07)
+================================================================================
+
+
+------------------------------------------------------------------------------
+[ ] LDAP-101 — Provider autenticazione LDAP/FreeIPA con sync utenti e gruppi
+------------------------------------------------------------------------------
+  Priorita: ALTA
+  Dipendenze: OIDC-035 (completato), TENANT-020 (completato), TEAM-022 (completato)
+
+  DESCRIZIONE:
+  Aggiungere un provider di autenticazione LDAP diretto tramite passport-ldapauth,
+  complementare all'OIDC gia' esistente. Molti ambienti enterprise usano FreeIPA o
+  OpenLDAP come identity source e preferiscono LDAP bind diretto al setup OIDC.
+  Include sync periodico utenti/gruppi LDAP verso tenant/team di Arsenale.
+
+  DETTAGLI TECNICI:
+  1) Passport.js LDAP strategy (passport-ldapauth) per LDAP bind auth
+  2) Configurazione LDAP per tenant: server URL, bind DN, base DN, search filters
+     utente/gruppo, TLS/STARTTLS, timeout
+  3) Sync periodico (node-cron): mapping gruppi LDAP -> team Arsenale,
+     creazione/disabilitazione utenti automatica, conflict resolution
+  4) Tab dedicato nelle Settings UI per configurazione LDAP con pulsante
+     "Test Connection" e anteprima risultati sync (dry-run)
+  5) Aggiungere LDAP all'enum AuthProvider in schema.prisma
+  6) Audit logging per eventi sync LDAP (LDAP_SYNC_START, LDAP_SYNC_COMPLETE,
+     LDAP_SYNC_ERROR, LDAP_USER_CREATED, LDAP_USER_DISABLED)
+  7) FreeIPA: base DN tipico cn=users,cn=accounts,dc=domain — supportare
+     sia RFC 2307bis che compat tree
+
+  NOTE:
+  - FreeIPA usa IPAUniqueID anziche' entryUUID — gestire entrambi
+  - Compatibile con: FreeIPA, OpenLDAP, 389 Directory Server, LLDAP
+  - Pattern multi-provider da replicare: server/src/services/email/
+  - Pattern OIDC di riferimento: server/src/config/passport.ts
+
+
+------------------------------------------------------------------------------
+[ ] SYNC-102 — Sincronizzatore connessioni da NetBox (import device/VM)
+------------------------------------------------------------------------------
+  Priorita: ALTA
+  Dipendenze: TENANT-020 (completato), connection.service.ts
+
+  DESCRIZIONE:
+  Sincronizzare dispositivi e VM da NetBox come connessioni in Arsenale. NetBox e'
+  lo standard de facto per DCIM/IPAM open-source. L'import automatico elimina la
+  duplicazione dati e mantiene la lista connessioni aggiornata. Devolutions RDM ha
+  aggiunto questa feature in v2025.3, confermando la domanda di mercato.
+
+  DETTAGLI TECNICI:
+  1) Client API NetBox: autenticazione token, query paginate su /api/dcim/devices/
+     e /api/virtualization/virtual-machines/, risoluzione IP primario
+  2) Sync profile per tenant: URL NetBox, token API, filtri (site, role, tag,
+     status), intervallo sync, strategia conflitto (update/skip/overwrite)
+  3) Mapping configurabile: platform NetBox -> protocollo (Linux=SSH, Windows=RDP),
+     custom fields NetBox -> proprieta' connessione, site/rack -> cartelle
+  4) Sync manuale (trigger da UI) + auto-sync schedulato (node-cron)
+  5) UI gestione sync profiles nelle Settings tenant (CRUD profili, log sync,
+     anteprima dry-run prima di confermare import)
+  6) Modello Prisma SyncProfile: id, tenantId, provider (NETBOX), config (Json),
+     lastSyncAt, lastSyncStatus, cronExpression, createdById
+  7) Audit logging: SYNC_START, SYNC_COMPLETE, SYNC_ERROR con conteggi
+     (created, updated, skipped, failed)
+
+  NOTE:
+  - NetBox REST API: GET /api/dcim/devices/?limit=50&offset=0 con paginazione
+  - IP primario: device.primary_ip4.address o primary_ip6.address
+  - Il SyncProfile model e' generico per supportare futuri provider (Snipe-IT, etc.)
+  - Pattern provider da seguire: server/src/orchestrator/ (abstract interface)
+
+
+------------------------------------------------------------------------------
+[ ] SYNC-103 — Import inventario Ansible come connessioni
+------------------------------------------------------------------------------
+  Priorita: MEDIA
+  Dipendenze: IO-071 (da fare), connection.service.ts
+
+  DESCRIZIONE:
+  Importare connessioni da file inventario Ansible (YAML strutturato e INI flat).
+  Ansible e' lo strumento di configuration management dominante e i team IT
+  mantengono gia' inventari con hostname, IP, porte SSH e struttura gruppi.
+  Estende la pipeline import/export di IO-071 con formato Ansible-specifico.
+
+  DETTAGLI TECNICI:
+  1) Parser inventario Ansible YAML: struttura all/children/hosts con vars
+  2) Parser inventario Ansible INI: sezioni [group], host lines, [group:vars]
+  3) Mapping: ansible_host -> host, ansible_port -> port (default 22),
+     ansible_user -> username, ansible_connection -> tipo (ssh default)
+  4) Mapping gruppi Ansible -> cartelle Arsenale (gerarchia preservata)
+  5) Supporto variabili host: ansible_ssh_private_key_file (riferimento a
+     vault secret se presente), ansible_become, ansible_python_interpreter
+  6) Upload file via UI import/export esistente (estensione IO-071)
+  7) Opzionale: pull inventario da Ansible Semaphore API endpoint
+
+  NOTE:
+  - Formato YAML: { all: { children: { webservers: { hosts: { web1: { ansible_host: '10.0.0.1' } } } } } }
+  - Formato INI: [webservers]\n web1 ansible_host=10.0.0.1 ansible_port=22
+  - Libreria yaml: gia' disponibile via js-yaml o yaml nel progetto
+  - Questo task estende IO-071 — puo' essere implementato dopo o in parallelo
+
+
+------------------------------------------------------------------------------
+[ ] VAULT-101 — Provider credenziali esterno HashiCorp Vault
+------------------------------------------------------------------------------
+  Priorita: MEDIA
+  Dipendenze: VAULT-055 (completato), connection.service.ts
+
+  DESCRIZIONE:
+  Permettere di referenziare credenziali archiviate in HashiCorp Vault (HCV)
+  anziche' duplicarle nel vault interno di Arsenale. Al momento della connessione,
+  le credenziali vengono recuperate da HCV e iniettate nei parametri SSH/RDP.
+  Integra Arsenale nei workflow di secrets management enterprise esistenti.
+
+  DETTAGLI TECNICI:
+  1) Client HCV: autenticazione AppRole (role_id + secret_id) o token statico,
+     supporto namespace, KV v2 secrets engine (GET /v1/secret/data/:path)
+  2) Configurazione HCV per tenant: Vault URL, metodo auth, namespace,
+     mount path, CA certificate (per TLS custom)
+  3) Nuovo tipo sorgente credenziali su connessione: EXTERNAL_VAULT oltre a
+     inline e keychain secret — campo vaultPath (es. "secret/data/servers/web1")
+  4) Risoluzione credenziali al session start: fetch da HCV, parsing response
+     (data.data.username, data.data.password), inject in parametri sessione
+  5) Caching con TTL configurabile per evitare chiamate API ad ogni connessione
+  6) UI: selezione "External Vault" nel ConnectionDialog con campo path,
+     pulsante test per verificare accesso al secret
+  7) Settings UI per configurazione HCV tenant con connection test
+  8) Fallback: se HCV non raggiungibile, mostrare errore chiaro (non fallback
+     silenzioso a credenziali vuote)
+
+  NOTE:
+  - HCV KV v2 response: { data: { data: { username: "...", password: "..." }, metadata: { ... } } }
+  - AppRole auth: POST /v1/auth/approle/login { role_id, secret_id } -> client_token
+  - Le credenziali HCV NON vengono mai persistite in Arsenale — solo cache in-memory
+  - Pattern di riferimento: server/src/services/crypto.service.ts (vault sessions)
+  - Libreria: node-vault o chiamate fetch dirette (API REST semplice)
+
+
+================================================================================
+  SEZIONE G — IP ADDRESS INTELLIGENCE (Scouted 2026-03-07)
+================================================================================
+
+------------------------------------------------------------------------------
+[ ] GEO-106 — IP geolocation enrichment with MaxMind GeoLite2
+------------------------------------------------------------------------------
+  Priorita: ALTA
+  Dipendenze: Nessuna
+
+  DESCRIZIONE:
+  Enrich every audit log entry with country, city, and coordinates at write
+  time using the MaxMind GeoLite2 local database (.mmdb file). No external
+  API calls, sub-millisecond lookups, zero privacy leakage. Display country
+  flags and location text alongside IPs in all audit UIs. Add country filter.
+
+  DETTAGLI TECNICI:
+  1) npm dependency: maxmind (pure JS reader, no native bindings)
+  2) GeoLite2-City DB (~70MB) downloaded separately (free MaxMind license key),
+     path configured via GEOIP_DB_PATH env var (optional, geo disabled if missing)
+  3) New service: server/src/services/geoip.service.ts — singleton, opens .mmdb
+     at startup, exposes lookup(ip): { country, countryCode, city, lat, lng } | null
+  4) Prisma schema: add geoCountry String?, geoCity String?, geoCoords Float[]
+     to AuditLog model + @@index([geoCountry])
+  5) Modify audit.service.ts log(): call geoip.lookup(ip) synchronously and
+     populate geo fields in prisma.auditLog.create() data
+  6) Extend API response types (server + client) with geoCountry, geoCity, geoCoords
+  7) UI: all 3 audit tables (AuditLogDialog, TenantAuditLogSection,
+     ConnectionAuditLogDialog) — show flag emoji + city next to IP address
+  8) New country filter dropdown populated from GET /audit/countries endpoint
+  9) CSV export: add Country and City columns
+  10) Helper script scripts/update-geodb.sh for downloading/updating the DB file
+
+  NOTE:
+  - Foundational feature — GEO-107, SEC-108 depend on this
+  - Graceful degradation: if .mmdb file not found, geo fields are null, UI unchanged
+  - Private/unresolvable IPs return null (no error)
+
+------------------------------------------------------------------------------
+[ ] GEO-107 — Audit log geolocation map visualization
+------------------------------------------------------------------------------
+  Priorita: BASSA
+  Dipendenze: GEO-106
+
+  DESCRIZIONE:
+  Interactive world map in the Tenant Audit Log showing geographic distribution
+  of login/session events. Markers sized by event count, color-coded by action
+  type. Click a marker to filter the table by that location. Toggle between
+  list and map views.
+
+  DETTAGLI TECNICI:
+  1) npm dependency: react-simple-maps (SVG-based, works offline, no tile server
+     — ideal for self-hosted deployments)
+  2) New component: client/src/components/Audit/AuditGeoMap.tsx — ComposableMap
+     with Geographies (world) and Marker circles, tooltips on hover (city,
+     country, event count, last activity)
+  3) New API endpoint: GET /api/audit/tenant/geo-summary (admin-only) — returns
+     aggregated { points: [{ lat, lng, country, city, count, lastSeen }] },
+     filtered by tenant users, default last 30 days
+  4) TenantAuditLogSection: add ToggleButtonGroup (List/Map icons) above table,
+     persist view mode in uiPreferencesStore (tenantAuditLogViewMode)
+  5) Click-to-filter: clicking a marker sets country filter and switches to
+     table view showing events from that location
+  6) Color-coding: LOGIN events green, LOGIN_FAILURE red, SESSION_START blue
+
+  NOTE:
+  - react-simple-maps bundles a TopoJSON world map (~150KB), no external tiles
+  - Consider lazy-loading the map component to avoid bundle size impact
+
+------------------------------------------------------------------------------
+[ ] SEC-108 — Impossible travel detection with admin alerts
+------------------------------------------------------------------------------
+  Priorita: ALTA
+  Dipendenze: GEO-106
+
+  DESCRIZIONE:
+  Detect when consecutive login events for the same user originate from
+  geographically distant locations in impossibly short timeframes (e.g., Rome
+  then Tokyo in 10 minutes). Automatically notify tenant admins via existing
+  notification system and flag the event in audit log UIs with a warning badge.
+
+  DETTAGLI TECNICI:
+  1) New service: server/src/services/impossibleTravel.service.ts — Haversine
+     distance calculation between two geo coordinate pairs
+  2) Triggered after auth-related audit writes (LOGIN, LOGIN_OAUTH, LOGIN_TOTP,
+     LOGIN_SMS, LOGIN_WEBAUTHN, SESSION_START) as fire-and-forget in audit.service.ts
+  3) Logic: query user's previous auth event with geoCoords, calculate
+     distance_km / time_hours, flag if > threshold (default 900 km/h)
+  4) Configurable via IMPOSSIBLE_TRAVEL_SPEED_KMH env var (default 900)
+  5) Prisma schema: add flags String[] @default([]) to AuditLog model
+  6) On detection: write 'IMPOSSIBLE_TRAVEL' to flags of suspicious entry,
+     create notification for tenant ADMIN/OWNER users via notification.service
+  7) Add IMPOSSIBLE_TRAVEL_DETECTED to NotificationType enum
+  8) UI: warning icon next to action chip for flagged entries in all 3 audit
+     tables + "Show flagged only" toggle filter
+  9) Notification message includes: user name/email, two locations, timeframe
+
+  NOTE:
+  - Haversine formula: a=sin²(dlat/2)+cos(lat1)*cos(lat2)*sin²(dlon/2), d=2R*atan2(sqrt(a),sqrt(1-a))
+  - 900 km/h threshold = faster than commercial aviation
+  - VPN users may trigger false positives — consider a "dismiss" action on notifications
+
+------------------------------------------------------------------------------
+[ ] GUARD-109 — Tenant-level IP allowlist with audit flagging
+------------------------------------------------------------------------------
+  Priorita: MEDIA
+  Dipendenze: Nessuna
+
+  DESCRIZIONE:
+  Allow tenant admins to define trusted IP addresses and CIDR ranges. When
+  enabled, logins from IPs outside the allowlist are either flagged in the
+  audit log (soft mode) or blocked entirely (hard mode). Network-level access
+  control without requiring VPN, complementing GUARD-105 (loopback guard).
+
+  DETTAGLI TECNICI:
+  1) Prisma schema: add to Tenant model — ipAllowlistEnabled Boolean @default(false),
+     ipAllowlistMode String @default("flag") (values: "flag"|"block"),
+     ipAllowlistEntries String[] @default([]) (CIDR strings like "10.0.0.0/8")
+  2) New utility: server/src/utils/ipAllowlist.ts — isIpInCidr(ip, cidr) using
+     Node.js net module (no external dependency), isIpAllowed(ip, entries[])
+  3) Shared function enforceIpAllowlist(tenantId, ip) called in all auth paths:
+     auth.controller.ts, oauth.controller.ts, saml.controller.ts,
+     webauthn.controller.ts, smsMfa.controller.ts
+  4) Block mode: reject with 403 + audit log LOGIN_FAILURE { reason: 'ip_not_allowed' }
+  5) Flag mode: allow login but add 'UNTRUSTED_IP' to audit entry flags array
+     (uses flags field from SEC-108, or details JSON if SEC-108 not yet implemented)
+  6) API endpoints: PUT /api/tenant/ip-allowlist and GET /api/tenant/ip-allowlist
+     (Admin/Owner only), validate entries are valid IP/CIDR
+  7) New Settings section: client/src/components/Settings/IpAllowlistSection.tsx
+     — toggle, mode selector, chip-based CIDR input with validation, "Test IP" button
+  8) Render in SettingsDialog under Organization/Administration tab
+  9) Audit log entry TENANT_UPDATE when allowlist is modified
+
+  NOTE:
+  - Pattern: similar to existing SelfSignupSection.tsx in Settings
+  - CIDR validation: check format with regex + verify base address is valid
+  - Warning banner in UI when switching to block mode explaining consequences
+  - Devolutions Hub offers equivalent functionality
+
+
+================================================================================
+  SEZIONE H — EXTENDED ROLES & EXTERNAL USER MANAGEMENT (Scouted 2026-03-07)
+================================================================================
+
+------------------------------------------------------------------------------
+[ ] ROLE-110 — Ruoli tenant estesi: AUDITOR, CONSULTANT, GUEST, OPERATOR
+------------------------------------------------------------------------------
+  Priorita: ALTA
+  Dipendenze: TENANT-096
+
+  DESCRIZIONE:
+  Aggiungere 4 nuovi valori all'enum TenantRole per coprire personas comuni
+  in ambienti enterprise: OPERATOR (gestione infrastruttura senza admin
+  utenti), CONSULTANT (accesso connessioni assegnate, no creazione),
+  AUDITOR (sola lettura audit log e sessioni), GUEST (sola visualizzazione
+  info connessioni condivise, no connessione). Gerarchia espansa:
+  OWNER(4) > ADMIN(3) > OPERATOR(2) > MEMBER(1) > CONSULTANT(0.5) >
+  AUDITOR(0.3) > GUEST(0.1).
+
+  DETTAGLI TECNICI:
+  1) Schema Prisma (server/prisma/schema.prisma): aggiungere OPERATOR,
+     CONSULTANT, AUDITOR, GUEST all'enum TenantRole. Migrazione con
+     ALTER TYPE "TenantRole" ADD VALUE per ciascuno.
+
+  2) Middleware tenant (server/src/middleware/tenant.middleware.ts):
+     - Espandere ROLE_HIERARCHY con i nuovi valori numerici
+     - Ampliare tipo parametro requireTenantRole per accettare tutti i ruoli
+     - Nuovo middleware requireTenantRoleAny(...roles) per accesso non
+       gerarchico (es. audit routes accettano ADMIN + AUDITOR ma non MEMBER)
+
+  3) Routes (aggiornamento selettivo):
+     - audit.routes.ts: lettura audit -> requireTenantRoleAny('ADMIN', 'OWNER', 'AUDITOR')
+     - session.routes.ts: viste sessioni read-only -> permettere AUDITOR e OPERATOR
+     - gateway.routes.ts: gestione gateway -> requireTenantRole('OPERATOR')
+     - User management routes -> restano requireTenantRole('ADMIN')
+
+  4) Tipi (server/src/types/index.ts): espandere unione AuthPayload.tenantRole
+
+  5) Controller (server/src/controllers/tenant.controller.ts): espandere
+     z.enum negli schemi Zod per invite/create/updateRole
+
+  6) Client — utility ruoli centralizzata:
+     - CREARE client/src/utils/roles.ts: funzioni isAtLeast(role, minRole),
+       canViewAudit(role), canConnect(role), mappe label/colore per ruolo
+     - Aggiornare TenantSection.tsx, InviteDialog.tsx, CreateUserDialog.tsx:
+       nuovi ruoli nei selettori
+     - Aggiornare SettingsDialog.tsx: mostrare tab audit per AUDITOR,
+       tab gateway per OPERATOR
+     - Aggiornare GatewaySection.tsx, KeychainDialog.tsx,
+       ConnectionAuditLogDialog.tsx: usare helpers da roles.ts al posto
+       di isAdmin inline
+
+  File coinvolti:
+    MODIFICARE: server/prisma/schema.prisma
+    MODIFICARE: server/src/types/index.ts
+    MODIFICARE: server/src/middleware/tenant.middleware.ts
+    MODIFICARE: server/src/routes/audit.routes.ts
+    MODIFICARE: server/src/routes/session.routes.ts
+    MODIFICARE: server/src/routes/gateway.routes.ts
+    MODIFICARE: server/src/controllers/tenant.controller.ts
+    MODIFICARE: server/src/controllers/audit.controller.ts
+    CREARE:     client/src/utils/roles.ts
+    MODIFICARE: client/src/components/Settings/TenantSection.tsx
+    MODIFICARE: client/src/components/Settings/GatewaySection.tsx
+    MODIFICARE: client/src/components/Dialogs/InviteDialog.tsx
+    MODIFICARE: client/src/components/Dialogs/CreateUserDialog.tsx
+    MODIFICARE: client/src/components/Dialogs/SettingsDialog.tsx
+    MODIFICARE: client/src/components/Dialogs/KeychainDialog.tsx
+    MODIFICARE: client/src/components/Dialogs/ConnectionAuditLogDialog.tsx
+    MODIFICARE: client/src/api/tenant.api.ts
+
+  NOTE:
+  - Il middleware requireTenantRole usa gia' confronto numerico — i ruoli
+    esistenti (MEMBER, ADMIN, OWNER) richiedono zero modifiche ai route guard
+    correnti, i nuovi ruoli vengono automaticamente esclusi dalle route che
+    richiedono MEMBER come minimo
+  - Devolutions RDM, Termius e JumpCloud offrono ruoli simili (Guest,
+    Consultant/Editor, Auditor) come standard di mercato
+  - Compatibile con TENANT-096 (multi-org): ruolo letto da TenantMember, non User
+
+
+------------------------------------------------------------------------------
+[ ] ROLE-111 — Membership a tempo limitato con scadenza automatica
+------------------------------------------------------------------------------
+  Priorita: ALTA
+  Dipendenze: ROLE-110, TENANT-096
+
+  DESCRIZIONE:
+  Aggiungere campo opzionale expiresAt a TenantMember e TeamMember per
+  consentire accesso a tempo limitato. Uno scheduler revoca automaticamente
+  le membership scadute. Critico per consulenti, contractor e auditor
+  esterni che necessitano accesso temporaneo. Difesa in profondita':
+  la validazione avviene sia a livello JWT (token refresh) sia via
+  scheduler batch (cleanup e audit).
+
+  DETTAGLI TECNICI:
+  1) Schema Prisma (server/prisma/schema.prisma):
+     - Aggiungere expiresAt DateTime? a TenantMember e TeamMember
+     - Aggiungere @@index([expiresAt]) su entrambi
+     - Aggiungere TENANT_MEMBERSHIP_EXPIRED e TEAM_MEMBERSHIP_EXPIRED
+       all'enum AuditAction
+
+  2) Scheduler (server/src/services/scheduler.service.ts):
+     - Nuovo cron job startMembershipExpirationJob() ogni 5 minuti
+     - Logica: query membership con expiresAt <= now() e non gia' disattivate,
+       per TenantMember: disattivare (isActive=false), rimuovere da tutti
+       i team del tenant, log audit TENANT_MEMBERSHIP_EXPIRED
+     - Per TeamMember: rimuovere record, log TEAM_MEMBERSHIP_EXPIRED
+
+  3) Auth service (server/src/services/auth.service.ts):
+     - issueTokens()/refreshAccessToken(): aggiungere filtro
+       expiresAt: { OR: [null, { gt: new Date() }] } alla query
+       TenantMember — previene uso di membership scadute anche prima
+       dell'esecuzione dello scheduler
+
+  4) Tenant service (server/src/services/tenant.service.ts):
+     - inviteUser()/createUser(): accettare parametro opzionale expiresAt
+     - Nuovo: updateMembershipExpiry(tenantId, userId, expiresAt)
+     - listTenantUsers(): includere expiresAt, indicare stato scaduto
+
+  5) Team service (server/src/services/team.service.ts):
+     - addMember(): accettare parametro opzionale expiresAt
+     - Nuovo: updateMemberExpiry(teamId, userId, expiresAt)
+
+  6) Routes/Controllers:
+     - PATCH /tenants/:id/users/:userId/expiry
+     - PATCH /teams/:id/members/:userId/expiry
+     - Espandere schemi Zod invite/create con expiresAt opzionale
+
+  7) Client:
+     - InviteDialog.tsx/CreateUserDialog.tsx: date picker opzionale
+       "Accesso scade il"
+     - TenantSection.tsx: colonna "Scadenza" nella tabella utenti, badge
+       "Scaduto", azione context menu per impostare/rimuovere scadenza
+     - TeamSection.tsx: stesso pattern per membri team
+
+  File coinvolti:
+    MODIFICARE: server/prisma/schema.prisma
+    MODIFICARE: server/src/services/scheduler.service.ts
+    MODIFICARE: server/src/services/auth.service.ts
+    MODIFICARE: server/src/services/tenant.service.ts
+    MODIFICARE: server/src/services/team.service.ts
+    MODIFICARE: server/src/controllers/tenant.controller.ts
+    MODIFICARE: server/src/controllers/team.controller.ts
+    MODIFICARE: server/src/routes/tenant.routes.ts
+    MODIFICARE: server/src/routes/team.routes.ts
+    MODIFICARE: server/src/index.ts
+    MODIFICARE: client/src/components/Dialogs/InviteDialog.tsx
+    MODIFICARE: client/src/components/Dialogs/CreateUserDialog.tsx
+    MODIFICARE: client/src/components/Settings/TenantSection.tsx
+    MODIFICARE: client/src/components/Settings/TeamSection.tsx
+    MODIFICARE: client/src/api/tenant.api.ts
+    MODIFICARE: client/src/api/team.api.ts
+    MODIFICARE: client/src/store/tenantStore.ts
+    MODIFICARE: client/src/store/teamStore.ts
+
+  NOTE:
+  - JumpCloud offre Time-Based Access Control (TBAC) con revoca automatica
+    come feature premium — questa implementazione lo porta in Arsenale
+  - Lo scheduler e' best-effort; la difesa primaria e' nel token refresh
+    (nessun token valido = nessun accesso, anche se lo scheduler e' in ritardo)
+  - Compatibile con il cron framework existente (node-cron in scheduler.service.ts)
+
+
+------------------------------------------------------------------------------
+[ ] ROLE-112 — Flag di permesso granulari con override per utente
+------------------------------------------------------------------------------
+  Priorita: MEDIA
+  Dipendenze: ROLE-110, TENANT-096
+
+  DESCRIZIONE:
+  Aggiungere campo permissionOverrides (JSON) a TenantMember per consentire
+  agli admin di attivare/disattivare capacita' specifiche per singolo utente,
+  oltre a quanto previsto dal ruolo base. Ogni ruolo built-in ha un set
+  predefinito di flag; gli override sovrascrivono singoli flag senza
+  cambiare il ruolo. Es: un MEMBER puo' ottenere canViewAuditLog senza
+  diventare ADMIN, un CONSULTANT puo' perdere canShareConnections.
+
+  Flag iniziali:
+    canConnect, canCreateConnections, canManageConnections,
+    canViewCredentials, canShareConnections, canViewAuditLog,
+    canManageSessions, canManageGateways, canManageUsers,
+    canManageSecrets, canManageTenantSettings
+
+  Default per ruolo:
+    OWNER:      tutti abilitati
+    ADMIN:      tutti tranne canManageTenantSettings
+    OPERATOR:   canConnect, canCreate/Manage Connections/Credentials,
+                canShare, canViewAuditLog, canManageSessions, canManageGateways,
+                canManageSecrets
+    MEMBER:     canConnect, canCreate/Manage Connections/Credentials,
+                canShare, canManageSecrets
+    CONSULTANT: canConnect
+    AUDITOR:    canViewAuditLog, canManageSessions
+    GUEST:      (nessun flag attivo)
+
+  DETTAGLI TECNICI:
+  1) Schema Prisma: aggiungere permissionOverrides Json? a TenantMember.
+     Formato: { "canViewAuditLog": true, "canManageGateways": false }.
+     Solo flag overridden sono salvati; assenti = default del ruolo.
+
+  2) Nuovo servizio (server/src/services/rolePermission.service.ts):
+     - ROLE_DEFAULTS: Record<TenantRole, Record<PermissionFlag, boolean>>
+     - resolvePermissions(role, overrides?): merge default + override
+     - hasPermission(userId, tenantId, flag): fetch TenantMember, risolvi, controlla
+     - Cache in-memory con TTL 30s (Map, chiave userId:tenantId),
+       invalidata su cambio ruolo/override
+
+  3) Middleware (server/src/middleware/tenant.middleware.ts):
+     - Nuovo requirePermission(...flags) — supplementa (non sostituisce)
+       requireTenantRole. Le route possono usare uno o entrambi.
+
+  4) Routes (migrazione graduale delle route chiave):
+     - audit.routes.ts -> requirePermission('canViewAuditLog')
+     - session.routes.ts -> requirePermission('canManageSessions')
+     - gateway.routes.ts -> requirePermission('canManageGateways')
+     - User management -> requirePermission('canManageUsers')
+
+  5) Tenant service/controller/routes:
+     - PATCH /:id/users/:userId/permissions — set override
+     - Validazione: OWNER non puo' avere permessi ridotti; non si puo'
+       concedere un permesso che il concedente non possiede
+
+  6) Client:
+     - CREARE client/src/components/Settings/PermissionEditor.tsx: griglia
+       toggle con indicazione default del ruolo, override evidenziati
+     - Integrare in context menu utente in TenantSection.tsx ("Edit Permissions")
+     - Aggiornare client/src/utils/roles.ts con tipi flag e mapping default
+
+  File coinvolti:
+    MODIFICARE: server/prisma/schema.prisma
+    CREARE:     server/src/services/rolePermission.service.ts
+    MODIFICARE: server/src/middleware/tenant.middleware.ts
+    MODIFICARE: server/src/routes/audit.routes.ts
+    MODIFICARE: server/src/routes/session.routes.ts
+    MODIFICARE: server/src/routes/gateway.routes.ts
+    MODIFICARE: server/src/routes/tenant.routes.ts
+    MODIFICARE: server/src/services/tenant.service.ts
+    MODIFICARE: server/src/controllers/tenant.controller.ts
+    MODIFICARE: server/src/types/index.ts
+    MODIFICARE: client/src/utils/roles.ts
+    CREARE:     client/src/components/Settings/PermissionEditor.tsx
+    MODIFICARE: client/src/components/Settings/TenantSection.tsx
+    MODIFICARE: client/src/api/tenant.api.ts
+    MODIFICARE: client/src/store/tenantStore.ts
+
+  NOTE:
+  - Devolutions RDM offre funzionalita' simile con "section-level permission
+    control" che consente override granulari per utente
+  - Il campo JSON evita esplosione di colonne booleane nello schema e
+    supporta aggiunta di nuovi flag senza migrazioni
+  - La cache 30s bilancia performance e consistenza — un cambio permesso
+    diventa effettivo al massimo in 30 secondi
+
+
+------------------------------------------------------------------------------
+[ ] ROLE-113 — Flusso invito guest esterno con onboarding self-service
+------------------------------------------------------------------------------
+  Priorita: MEDIA
+  Dipendenze: ROLE-110, ROLE-111
+
+  DESCRIZIONE:
+  Flusso semplificato per invitare utenti esterni (consulenti, auditor,
+  vendor) che non hanno ancora un account. L'admin invia un invito via
+  email con link di setup; l'utente esterno crea il proprio account
+  direttamente con il ruolo e la scadenza pre-configurati dall'admin.
+  Distinto dall'invito esistente (che richiede pre-registrazione) e dalla
+  creazione utente admin (che richiede password impostata dall'admin).
+
+  DETTAGLI TECNICI:
+  1) Schema Prisma — nuovo modello TenantInvitation:
+     - id (uuid PK), tenantId, email, role (TenantRole),
+       membershipExpiresAt DateTime? (scadenza membership post-accettazione),
+       inviteToken String @unique, invitedById, acceptedAt DateTime?,
+       inviteExpiresAt DateTime (scadenza link, default 7 giorni), createdAt
+     - Aggiungere TENANT_INVITE_SEND e TENANT_INVITE_ACCEPT all'enum AuditAction
+
+  2) Nuovo servizio (server/src/services/invitation.service.ts):
+     - createInvitation(tenantId, email, role, expiresAt, invitedById):
+       crea TenantInvitation, genera token sicuro, invia email con link setup
+     - acceptInvitation(token, password?): valida token non scaduto; se utente
+       non esiste, crea account con password (vault setup, recovery key);
+       crea TenantMember con ruolo e scadenza; marca invito come accettato
+     - listPendingInvitations(tenantId), revokeInvitation(id)
+
+  3) Routes:
+     - POST /tenants/:id/invitations (ADMIN) — crea invito
+     - GET /tenants/:id/invitations (ADMIN) — lista inviti pendenti
+     - DELETE /tenants/:id/invitations/:invId (ADMIN) — revoca invito
+     - GET /auth/invitation/:token (pubblico) — valida token, ritorna info
+       (nome tenant, ruolo, scadenza, se utente esiste gia')
+     - POST /auth/invitation/:token/accept (pubblico) — accetta invito
+
+  4) Email (server/src/services/email.ts):
+     - Nuovo template sendInvitationEmail(email, tenantName, inviterName,
+       role, url, expiresAt)
+
+  5) Client:
+     - CREARE client/src/pages/InvitationAcceptPage.tsx: mostra info tenant,
+       ruolo, scadenza; form registrazione se non loggato, conferma se loggato
+       (nuova route /invite/:token — giustificata perche' acceduta da
+       utenti non autenticati via link email)
+     - CREARE client/src/components/Dialogs/GuestInviteDialog.tsx: selettore
+       ruolo (CONSULTANT, AUDITOR, GUEST, MEMBER), date picker scadenza
+       obbligatorio (default 30 giorni), input email
+     - TenantSection.tsx: sezione "Inviti Pendenti" con azione revoca
+     - App.tsx: aggiungere route /invite/:token
+
+  File coinvolti:
+    MODIFICARE: server/prisma/schema.prisma
+    CREARE:     server/src/services/invitation.service.ts
+    MODIFICARE: server/src/routes/tenant.routes.ts
+    MODIFICARE: server/src/routes/auth.routes.ts
+    MODIFICARE: server/src/controllers/tenant.controller.ts
+    MODIFICARE: server/src/controllers/auth.controller.ts
+    MODIFICARE: server/src/services/email.ts
+    CREARE:     client/src/pages/InvitationAcceptPage.tsx
+    CREARE:     client/src/components/Dialogs/GuestInviteDialog.tsx
+    MODIFICARE: client/src/components/Settings/TenantSection.tsx
+    MODIFICARE: client/src/api/tenant.api.ts
+    MODIFICARE: client/src/store/tenantStore.ts
+    MODIFICARE: client/src/App.tsx
+
+  NOTE:
+  - Ordine implementazione: ROLE-110 -> ROLE-111 -> ROLE-112 -> ROLE-113
+  - L'invito guest e' l'unico caso che giustifica una nuova route pagina
+    (accesso da utenti non autenticati via email)
+  - Il token di invito e' distinto dall'ExternalSecretShare gia' esistente:
+    quello condivide secrets senza login, questo crea account con membership
+  - Modello ispirato a JumpCloud temporary access e Devolutions guest invite
+
+
+================================================================================

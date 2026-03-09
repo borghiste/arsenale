@@ -1,10 +1,11 @@
 import api from './client';
 import type { SshTerminalConfig } from '../constants/terminalThemes';
 import type { RdpSettings } from '../constants/rdpDefaults';
+import type { VncSettings } from '../constants/vncDefaults';
 
 export interface ConnectionInput {
   name: string;
-  type: 'RDP' | 'SSH';
+  type: 'RDP' | 'SSH' | 'VNC';
   host: string;
   port: number;
   username?: string;
@@ -18,13 +19,14 @@ export interface ConnectionInput {
   gatewayId?: string | null;
   sshTerminalConfig?: Partial<SshTerminalConfig>;
   rdpSettings?: Partial<RdpSettings>;
+  vncSettings?: Partial<VncSettings>;
   defaultCredentialMode?: 'saved' | 'domain' | 'prompt' | null;
 }
 
 export interface ConnectionData {
   id: string;
   name: string;
-  type: 'RDP' | 'SSH';
+  type: 'RDP' | 'SSH' | 'VNC';
   host: string;
   port: number;
   folderId: string | null;
@@ -41,6 +43,7 @@ export interface ConnectionData {
   gatewayId?: string | null;
   sshTerminalConfig?: Partial<SshTerminalConfig> | null;
   rdpSettings?: Partial<RdpSettings> | null;
+  vncSettings?: Partial<VncSettings> | null;
   defaultCredentialMode?: 'saved' | 'domain' | 'prompt' | null;
   isOwner: boolean;
   permission?: string;
@@ -67,7 +70,7 @@ export async function createConnection(data: ConnectionInput): Promise<Connectio
 
 export interface ConnectionUpdate {
   name?: string;
-  type?: 'RDP' | 'SSH';
+  type?: 'RDP' | 'SSH' | 'VNC';
   host?: string;
   port?: number;
   username?: string;
@@ -80,6 +83,7 @@ export interface ConnectionUpdate {
   gatewayId?: string | null;
   sshTerminalConfig?: Partial<SshTerminalConfig> | null;
   rdpSettings?: Partial<RdpSettings> | null;
+  vncSettings?: Partial<VncSettings> | null;
   defaultCredentialMode?: 'saved' | 'domain' | 'prompt' | null;
 }
 

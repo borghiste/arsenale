@@ -2,6 +2,7 @@ import { Box, Typography } from '@mui/material';
 import { useTabsStore } from '../../store/tabsStore';
 import SshTerminal from '../Terminal/SshTerminal';
 import RdpViewer from '../RDP/RdpViewer';
+import VncViewer from '../VNC/VncViewer';
 
 export default function TabPanel() {
   const tabs = useTabsStore((s) => s.tabs);
@@ -41,6 +42,8 @@ export default function TabPanel() {
         >
           {tab.connection.type === 'SSH' ? (
             <SshTerminal connectionId={tab.connection.id} tabId={tab.id} credentials={tab.credentials} sshTerminalConfig={tab.connection.sshTerminalConfig} />
+          ) : tab.connection.type === 'VNC' ? (
+            <VncViewer connectionId={tab.connection.id} tabId={tab.id} isActive={tab.id === activeTabId} credentials={tab.credentials} />
           ) : (
             <RdpViewer connectionId={tab.connection.id} tabId={tab.id} isActive={tab.id === activeTabId} enableDrive={tab.connection.enableDrive} credentials={tab.credentials} />
           )}

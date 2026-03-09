@@ -69,6 +69,15 @@ export interface RdpSettings {
   timezone?: string;
 }
 
+export interface VncSettings {
+  colorDepth?: 8 | 16 | 24 | 32;
+  cursor?: 'local' | 'remote';
+  readOnly?: boolean;
+  clipboardEncoding?: 'ISO8859-1' | 'UTF-8' | 'UTF-16' | 'CP1252';
+  swapRedBlue?: boolean;
+  disableAudio?: boolean;
+}
+
 // --- Secret Payload Types (discriminated union) ---
 
 export interface LoginSecretData {

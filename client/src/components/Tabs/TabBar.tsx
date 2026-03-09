@@ -3,6 +3,7 @@ import {
   Close as CloseIcon,
   Computer as RdpIcon,
   Terminal as SshIcon,
+  DesktopWindows as VncIcon,
 } from '@mui/icons-material';
 import { useTabsStore } from '../../store/tabsStore';
 
@@ -33,10 +34,12 @@ export default function TabBar() {
             sx={{ minHeight: 36, textTransform: 'none', py: 0 }}
             icon={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                {tab.connection.type === 'RDP' ? (
-                  <RdpIcon sx={{ fontSize: 16 }} />
-                ) : (
+                {tab.connection.type === 'SSH' ? (
                   <SshIcon sx={{ fontSize: 16 }} />
+                ) : tab.connection.type === 'VNC' ? (
+                  <VncIcon sx={{ fontSize: 16 }} />
+                ) : (
+                  <RdpIcon sx={{ fontSize: 16 }} />
                 )}
                 <span>{tab.connection.name}</span>
                 <Box

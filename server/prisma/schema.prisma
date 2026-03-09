@@ -214,6 +214,7 @@ model Connection {
   enableDrive       Boolean        @default(false)
   sshTerminalConfig Json?
   rdpSettings       Json?
+  vncSettings       Json?
   defaultCredentialMode String?
   userId            String
   createdAt         DateTime       @default(now())
@@ -234,6 +235,7 @@ model Connection {
 enum ConnectionType {
   RDP
   SSH
+  VNC
 }
 
 enum GatewayType {
@@ -251,6 +253,7 @@ enum GatewayHealthStatus {
 enum SessionProtocol {
   SSH
   RDP
+  VNC
 }
 
 enum SessionStatus {

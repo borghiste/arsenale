@@ -34,6 +34,7 @@ export interface CreateConnectionInput {
   gatewayId?: string | null;
   sshTerminalConfig?: Prisma.InputJsonValue | null;
   rdpSettings?: Prisma.InputJsonValue | null;
+  vncSettings?: Prisma.InputJsonValue | null;
   defaultCredentialMode?: string | null;
 }
 
@@ -52,6 +53,7 @@ export interface UpdateConnectionInput {
   gatewayId?: string | null;
   sshTerminalConfig?: Prisma.InputJsonValue | null;
   rdpSettings?: Prisma.InputJsonValue | null;
+  vncSettings?: Prisma.InputJsonValue | null;
   defaultCredentialMode?: string | null;
 }
 
@@ -69,8 +71,8 @@ export async function createConnection(userId: string, input: CreateConnectionIn
     if (secret.type !== 'LOGIN' && secret.type !== 'SSH_KEY') {
       throw new AppError('Credential secret must be of type LOGIN or SSH_KEY', 400);
     }
-    if (input.type === 'RDP' && secret.type === 'SSH_KEY') {
-      throw new AppError('SSH_KEY secrets cannot be used with RDP connections', 400);
+    if ((input.type === 'RDP' || input.type === 'VNC') && secret.type === 'SSH_KEY') {
+      throw new AppError('SSH_KEY secrets cannot be used with RDP/VNC connections', 400);
     }
   }
 
@@ -121,6 +123,7 @@ export async function createConnection(userId: string, input: CreateConnectionIn
       gatewayId: input.gatewayId || null,
       sshTerminalConfig: input.sshTerminalConfig ?? undefined,
       rdpSettings: input.rdpSettings ?? undefined,
+      vncSettings: input.vncSettings ?? undefined,
       defaultCredentialMode: input.defaultCredentialMode ?? null,
       userId,
     },
@@ -142,6 +145,7 @@ export async function createConnection(userId: string, input: CreateConnectionIn
     enableDrive: connection.enableDrive,
     sshTerminalConfig: connection.sshTerminalConfig,
     rdpSettings: connection.rdpSettings,
+    vncSettings: connection.vncSettings,
     defaultCredentialMode: connection.defaultCredentialMode,
     createdAt: connection.createdAt,
     updatedAt: connection.updatedAt,
@@ -175,6 +179,7 @@ export async function updateConnection(
   if (input.gatewayId !== undefined) data.gatewayId = input.gatewayId;
   if (input.sshTerminalConfig !== undefined) data.sshTerminalConfig = input.sshTerminalConfig;
   if (input.rdpSettings !== undefined) data.rdpSettings = input.rdpSettings;
+  if (input.vncSettings !== undefined) data.vncSettings = input.vncSettings;
   if (input.defaultCredentialMode !== undefined) data.defaultCredentialMode = input.defaultCredentialMode;
 
   // Handle credentialSecretId changes
@@ -190,8 +195,8 @@ export async function updateConnection(
       if (secretAccess.secret.type !== 'LOGIN' && secretAccess.secret.type !== 'SSH_KEY') {
         throw new AppError('Credential secret must be of type LOGIN or SSH_KEY', 400);
       }
-      if (connType === 'RDP' && secretAccess.secret.type === 'SSH_KEY') {
-        throw new AppError('SSH_KEY secrets cannot be used with RDP connections', 400);
+      if ((connType === 'RDP' || connType === 'VNC') && secretAccess.secret.type === 'SSH_KEY') {
+        throw new AppError('SSH_KEY secrets cannot be used with RDP/VNC connections', 400);
       }
       data.credentialSecretId = input.credentialSecretId;
       // Clear inline credentials when switching to vault secret
@@ -255,6 +260,7 @@ export async function updateConnection(
     enableDrive: updated.enableDrive,
     sshTerminalConfig: updated.sshTerminalConfig,
     rdpSettings: updated.rdpSettings,
+    vncSettings: updated.vncSettings,
     defaultCredentialMode: updated.defaultCredentialMode,
     createdAt: updated.createdAt,
     updatedAt: updated.updatedAt,
@@ -353,6 +359,7 @@ export async function getConnection(userId: string, connectionId: string, tenant
     enableDrive: connection.enableDrive,
     sshTerminalConfig: connection.sshTerminalConfig,
     rdpSettings: connection.rdpSettings,
+    vncSettings: connection.vncSettings,
     defaultCredentialMode: connection.defaultCredentialMode,
     gatewayId: connection.gatewayId,
     gateway: connection.gateway,
@@ -383,6 +390,7 @@ export async function listConnections(userId: string, tenantId?: string | null) 
       enableDrive: true,
       sshTerminalConfig: true,
       rdpSettings: true,
+      vncSettings: true,
       defaultCredentialMode: true,
       createdAt: true,
       updatedAt: true,

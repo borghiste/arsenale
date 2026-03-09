@@ -32,7 +32,7 @@ const SCOPE_COLORS: Record<string, 'default' | 'primary' | 'secondary'> = {
 interface SecretPickerProps {
   value: string | null;
   onChange: (secretId: string | null, secret: SecretListItem | null) => void;
-  connectionType: 'SSH' | 'RDP';
+  connectionType: 'SSH' | 'RDP' | 'VNC';
   disabled?: boolean;
   error?: boolean;
   helperText?: string;
@@ -60,7 +60,7 @@ export default function SecretPicker({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const compatibleTypes: SecretType[] =
-    connectionType === 'RDP' ? ['LOGIN'] : ['LOGIN', 'SSH_KEY'];
+    connectionType === 'SSH' ? ['LOGIN', 'SSH_KEY'] : ['LOGIN'];
 
   // Synchronously set stub from initialName, then upgrade with full API data
   useEffect(() => {

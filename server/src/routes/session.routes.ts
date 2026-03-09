@@ -12,6 +12,11 @@ router.post('/rdp', sessionController.createRdpSession);
 router.post('/rdp/:sessionId/heartbeat', sessionController.rdpHeartbeat);
 router.post('/rdp/:sessionId/end', sessionController.rdpEnd);
 
+// VNC session lifecycle (same pattern as RDP, both use guacamole-lite)
+router.post('/vnc', sessionController.createVncSession);
+router.post('/vnc/:sessionId/heartbeat', sessionController.rdpHeartbeat);
+router.post('/vnc/:sessionId/end', sessionController.rdpEnd);
+
 // SSH session validation (existing, unchanged)
 router.post('/ssh', sessionController.validateSshAccess);
 

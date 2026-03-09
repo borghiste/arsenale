@@ -568,27 +568,12 @@ export async function adminChangeUserEmail(
   return updated;
 }
 
-export async function adminChangeUserPassword(
-  tenantId: string,
-  actingUserId: string,
-  targetUserId: string,
-  newPassword: string,
-  verificationId: string,
-) {
-  identityVerification.consumeVerification(verificationId, actingUserId, 'admin-action');
-
-  const actingMembership = await prisma.tenantMember.findUnique({
-    where: { tenantId_userId: { tenantId, userId: actingUserId } },
-  });
-  if (!actingMembership || (actingMembership.role !== 'ADMIN' && actingMembership.role !== 'OWNER')) {
-    throw new AppError('Insufficient permissions', 403);
-  }
-
-  const targetMembership = await prisma.tenantMember.findUnique({
-    where: { tenantId_userId: { tenantId, userId: targetUserId } },
-  });
-  if (!targetMembership) throw new AppError('User not found in this organization', 404);
-
+/**
+ * Core password-reset logic: hashes new password, regenerates vault,
+ * wipes encrypted data, invalidates tokens, and locks vault.
+ * Used by both the web admin flow and the CLI.
+ */
+async function resetPasswordCore(targetUserId: string, newPassword: string) {
   const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
 
   // Generate fresh vault
@@ -684,6 +669,32 @@ export async function adminChangeUserPassword(
   // Lock vault in memory
   lockVault(targetUserId);
 
+  return { recoveryKey };
+}
+
+export async function adminChangeUserPassword(
+  tenantId: string,
+  actingUserId: string,
+  targetUserId: string,
+  newPassword: string,
+  verificationId: string,
+) {
+  identityVerification.consumeVerification(verificationId, actingUserId, 'admin-action');
+
+  const actingMembership = await prisma.tenantMember.findUnique({
+    where: { tenantId_userId: { tenantId, userId: actingUserId } },
+  });
+  if (!actingMembership || (actingMembership.role !== 'ADMIN' && actingMembership.role !== 'OWNER')) {
+    throw new AppError('Insufficient permissions', 403);
+  }
+
+  const targetMembership = await prisma.tenantMember.findUnique({
+    where: { tenantId_userId: { tenantId, userId: targetUserId } },
+  });
+  if (!targetMembership) throw new AppError('User not found in this organization', 404);
+
+  const result = await resetPasswordCore(targetUserId, newPassword);
+
   auditService.log({
     userId: actingUserId,
     action: 'ADMIN_PASSWORD_CHANGE',
@@ -694,7 +705,28 @@ export async function adminChangeUserPassword(
 
   logger.verbose(`Admin ${actingUserId} reset password for user ${targetUserId}`);
 
-  return { recoveryKey };
+  return result;
+}
+
+/**
+ * Direct password reset for CLI usage — bypasses identity verification
+ * and permission checks (CLI access implies full trust).
+ */
+export async function adminResetPasswordDirect(
+  tenantId: string,
+  targetUserId: string,
+  newPassword: string,
+) {
+  const targetMembership = await prisma.tenantMember.findUnique({
+    where: { tenantId_userId: { tenantId, userId: targetUserId } },
+  });
+  if (!targetMembership) throw new AppError('User not found in this organization', 404);
+
+  const result = await resetPasswordCore(targetUserId, newPassword);
+
+  logger.verbose(`CLI reset password for user ${targetUserId}`);
+
+  return result;
 }
 
 export async function listUserTenants(userId: string) {

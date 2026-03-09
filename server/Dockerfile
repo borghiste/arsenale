@@ -18,6 +18,8 @@ RUN npx tsc
 
 RUN npm prune --production
 
+RUN printf '#!/bin/sh\nexec node /app/dist/cli.js "$@"\n' > /usr/local/bin/arsenale && chmod +x /usr/local/bin/arsenale
+
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
     && chown -R appuser:appgroup /app
 

@@ -6,6 +6,8 @@ import { AuthRequest, RdpSettings } from '../types';
 import { getConnection, getConnectionCredentials } from '../services/connection.service';
 import { resolveDomainCredentials } from '../services/domain.service';
 import { generateGuacamoleToken, mergeRdpSettings } from '../services/rdp.service';
+import { generateVncGuacamoleToken, mergeVncSettings } from '../services/vnc.service';
+import type { VncSettings } from '../types';
 import * as sessionService from '../services/session.service';
 import * as auditService from '../services/audit.service';
 import { selectInstance } from '../services/loadBalancer.service';
@@ -181,6 +183,129 @@ export async function createRdpSession(req: AuthRequest, res: Response, next: Ne
   }
 }
 
+// ---- VNC session creation ----
+
+export async function createVncSession(req: AuthRequest, res: Response, next: NextFunction) {
+  let connectionId: string | undefined;
+  let connHost: string | undefined;
+  let connPort: number | undefined;
+  let gatewayId: string | null | undefined;
+
+  try {
+    const parsed = sessionSchema.parse(req.body);
+    connectionId = parsed.connectionId;
+    const { username: _overrideUser, password: overridePass } = parsed;
+
+    const conn = await getConnection(req.user!.userId, connectionId, req.user!.tenantId);
+    connHost = conn.host;
+    connPort = conn.port;
+    gatewayId = conn.gatewayId;
+
+    if (conn.type !== 'VNC') {
+      throw new AppError('Not a VNC connection', 400);
+    }
+
+    // Resolve gateway for dynamic guacd routing
+    let guacdHost: string | undefined;
+    let guacdPort: number | undefined;
+    let selectedInstanceId: string | undefined;
+    let routingDecision: { strategy: string; candidateCount: number; selectedSessionCount: number } | undefined;
+
+    if (conn.gateway) {
+      if (conn.gateway.type !== 'GUACD') {
+        throw new AppError('Connection gateway must be of type GUACD for VNC connections', 400);
+      }
+      guacdHost = conn.gateway.host;
+      guacdPort = conn.gateway.port;
+
+      if (conn.gateway.isManaged) {
+        const inst = await selectInstance(conn.gateway.id, conn.gateway.lbStrategy);
+        if (!inst) {
+          throw new AppError(
+            'No healthy gateway instances available. The gateway may be scaling — please try again.',
+            503,
+          );
+        }
+        guacdHost = inst.host;
+        guacdPort = inst.port;
+        selectedInstanceId = inst.id;
+        routingDecision = {
+          strategy: inst.strategy,
+          candidateCount: inst.candidateCount,
+          selectedSessionCount: inst.selectedSessionCount,
+        };
+      }
+    }
+
+    // VNC uses only a password (no username typically)
+    let password: string;
+
+    if (overridePass) {
+      password = overridePass;
+    } else {
+      const creds = await getConnectionCredentials(req.user!.userId, connectionId, req.user!.tenantId);
+      if (creds.privateKey && !creds.password) {
+        throw new AppError('SSH key authentication is not supported for VNC connections', 400);
+      }
+      password = creds.password;
+    }
+
+    const connVncSettings = (conn.vncSettings as Partial<VncSettings>) ?? null;
+    const mergedVnc = mergeVncSettings(connVncSettings);
+
+    const token = generateVncGuacamoleToken({
+      host: conn.host,
+      port: conn.port,
+      password,
+      vncSettings: mergedVnc,
+      guacdHost,
+      guacdPort,
+      metadata: {
+        userId: req.user!.userId,
+        connectionId,
+        ipAddress: req.ip ?? undefined,
+      },
+    });
+
+    await sessionService.closeStaleSessionsForConnection(req.user!.userId, connectionId, 'VNC');
+
+    const sessionId = await sessionService.startSession({
+      userId: req.user!.userId,
+      connectionId,
+      gatewayId: conn.gatewayId ?? undefined,
+      instanceId: selectedInstanceId,
+      protocol: 'VNC',
+      guacToken: token,
+      ipAddress: req.ip ?? undefined,
+      metadata: { host: conn.host, port: conn.port },
+      routingDecision,
+    });
+
+    res.json({ token, sessionId });
+  } catch (err) {
+    const errorMessage = err instanceof z.ZodError
+      ? err.issues[0].message
+      : err instanceof Error ? err.message : 'Unknown error';
+
+    auditService.log({
+      userId: req.user?.userId,
+      action: 'SESSION_ERROR',
+      targetType: 'Connection',
+      targetId: connectionId,
+      details: {
+        protocol: 'VNC',
+        error: errorMessage,
+        ...(connHost ? { host: connHost, port: connPort } : {}),
+      },
+      ipAddress: req.ip,
+      gatewayId: gatewayId ?? undefined,
+    });
+
+    if (err instanceof z.ZodError) return next(new AppError(err.issues[0].message, 400));
+    next(err);
+  }
+}
+
 // ---- SSH access validation (unchanged from rdp.handler.ts) ----
 
 export async function validateSshAccess(req: AuthRequest, res: Response, next: NextFunction) {
@@ -248,7 +373,7 @@ export async function listActiveSessions(req: AuthRequest, res: Response, next: 
 
     const sessions = await sessionService.getActiveSessions({
       tenantId: req.user!.tenantId,
-      protocol: protocol === 'SSH' ? 'SSH' : protocol === 'RDP' ? 'RDP' : undefined,
+      protocol: protocol === 'SSH' ? 'SSH' : protocol === 'RDP' ? 'RDP' : protocol === 'VNC' ? 'VNC' : undefined,
       gatewayId,
     });
     res.json(sessions);

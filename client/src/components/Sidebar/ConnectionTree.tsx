@@ -9,6 +9,7 @@ import type { SelectChangeEvent } from '@mui/material';
 import {
   Computer as RdpIcon,
   Terminal as SshIcon,
+  DesktopWindows as VncIcon,
   ExpandMore,
   ChevronRight,
   Share as ShareIcon,
@@ -503,9 +504,11 @@ export default function ConnectionTree({ onEditConnection, onShareConnection, on
               pointerEvents: 'none',
               maxWidth: 220,
             }}>
-              {activeConnection.type === 'RDP'
-                ? <RdpIcon fontSize="small" color="primary" />
-                : <SshIcon fontSize="small" color="secondary" />}
+              {activeConnection.type === 'SSH'
+                ? <SshIcon fontSize="small" color="secondary" />
+                : activeConnection.type === 'VNC'
+                ? <VncIcon fontSize="small" color="info" />
+                : <RdpIcon fontSize="small" color="primary" />}
               <Typography variant="body2" noWrap>{activeConnection.name}</Typography>
             </Box>
           )}

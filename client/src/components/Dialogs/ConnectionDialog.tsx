@@ -16,6 +16,9 @@ import type { RdpSettings } from '../../constants/rdpDefaults';
 import { mergeRdpConfig } from '../../constants/rdpDefaults';
 import { useRdpSettingsStore } from '../../store/rdpSettingsStore';
 import RdpSettingsSection from '../Settings/RdpSettingsSection';
+import type { VncSettings } from '../../constants/vncDefaults';
+import { mergeVncConfig } from '../../constants/vncDefaults';
+import VncSettingsSection from '../Settings/VncSettingsSection';
 import { useGatewayStore } from '../../store/gatewayStore';
 import { useAuthStore } from '../../store/authStore';
 import SecretPicker from '../Keychain/SecretPicker';
@@ -31,7 +34,7 @@ interface ConnectionDialogProps {
 
 export default function ConnectionDialog({ open, onClose, connection, folderId, teamId }: ConnectionDialogProps) {
   const [name, setName] = useState('');
-  const [type, setType] = useState<'SSH' | 'RDP'>('SSH');
+  const [type, setType] = useState<'SSH' | 'RDP' | 'VNC'>('SSH');
   const [host, setHost] = useState('');
   const [port, setPort] = useState('22');
   const [username, setUsername] = useState('');
@@ -41,6 +44,7 @@ export default function ConnectionDialog({ open, onClose, connection, folderId, 
   const [enableDrive, setEnableDrive] = useState(false);
   const [sshTerminalConfig, setSshTerminalConfig] = useState<Partial<SshTerminalConfig>>({});
   const [rdpSettings, setRdpSettings] = useState<Partial<RdpSettings>>({});
+  const [vncSettings, setVncSettings] = useState<Partial<VncSettings>>({});
   const [gatewayId, setGatewayId] = useState('');
   const [credentialMode, setCredentialMode] = useState<'manual' | 'keychain'>('manual');
   const [selectedSecretId, setSelectedSecretId] = useState<string | null>(null);
@@ -76,6 +80,9 @@ export default function ConnectionDialog({ open, onClose, connection, folderId, 
       setRdpSettings(
         (connection.rdpSettings as Partial<RdpSettings>) ?? {}
       );
+      setVncSettings(
+        (connection.vncSettings as Partial<VncSettings>) ?? {}
+      );
       if (connection.credentialSecretId) {
         setCredentialMode('keychain');
         setSelectedSecretId(connection.credentialSecretId);
@@ -97,22 +104,24 @@ export default function ConnectionDialog({ open, onClose, connection, folderId, 
       setGatewayId('');
       setSshTerminalConfig({});
       setRdpSettings({});
+      setVncSettings({});
       setCredentialMode('manual');
       setSelectedSecretId(null);
       setDefaultConnectMode('');
     }
   }, [open, connection]);
 
-  const handleTypeChange = (newType: 'SSH' | 'RDP') => {
+  const handleTypeChange = (newType: 'SSH' | 'RDP' | 'VNC') => {
     setType(newType);
-    if (newType === 'SSH' && port === '3389') setPort('22');
-    if (newType === 'RDP' && port === '22') setPort('3389');
+    if (newType === 'SSH' && (port === '3389' || port === '5900')) setPort('22');
+    if (newType === 'RDP' && (port === '22' || port === '5900')) setPort('3389');
+    if (newType === 'VNC' && (port === '22' || port === '3389')) setPort('5900');
     setGatewayId('');
   };
 
   const availableGateways = gateways.filter((g) => {
     if (type === 'SSH') return g.type === 'SSH_BASTION' || g.type === 'MANAGED_SSH';
-    if (type === 'RDP') return g.type === 'GUACD';
+    if (type === 'RDP' || type === 'VNC') return g.type === 'GUACD';
     return false;
   });
 
@@ -149,6 +158,9 @@ export default function ConnectionDialog({ open, onClose, connection, folderId, 
           ...(type === 'RDP' && {
             rdpSettings: Object.keys(rdpSettings).length > 0 ? rdpSettings : null,
           }),
+          ...(type === 'VNC' && {
+            vncSettings: Object.keys(vncSettings).length > 0 ? vncSettings : null,
+          }),
           defaultCredentialMode: (defaultConnectMode as 'saved' | 'domain' | 'prompt') || null,
         };
         if (credentialMode === 'manual') {
@@ -176,6 +188,9 @@ export default function ConnectionDialog({ open, onClose, connection, folderId, 
           }),
           ...(type === 'RDP' && Object.keys(rdpSettings).length > 0 && {
             rdpSettings,
+          }),
+          ...(type === 'VNC' && Object.keys(vncSettings).length > 0 && {
+            vncSettings,
           }),
           ...(defaultConnectMode ? { defaultCredentialMode: defaultConnectMode as 'saved' | 'domain' | 'prompt' } : {}),
         };
@@ -206,6 +221,7 @@ export default function ConnectionDialog({ open, onClose, connection, folderId, 
     setGatewayId('');
     setSshTerminalConfig({});
     setRdpSettings({});
+    setVncSettings({});
     setCredentialMode('manual');
     setSelectedSecretId(null);
     setDefaultConnectMode('');
@@ -231,11 +247,12 @@ export default function ConnectionDialog({ open, onClose, connection, folderId, 
             <Select
               value={type}
               label="Type"
-              onChange={(e) => handleTypeChange(e.target.value as 'SSH' | 'RDP')}
+              onChange={(e) => handleTypeChange(e.target.value as 'SSH' | 'RDP' | 'VNC')}
               disabled={isEditMode}
             >
               <MenuItem value="SSH">SSH</MenuItem>
               <MenuItem value="RDP">RDP</MenuItem>
+              <MenuItem value="VNC">VNC</MenuItem>
             </Select>
           </FormControl>
           {hasTenant && availableGateways.length > 0 && (
@@ -385,6 +402,21 @@ export default function ConnectionDialog({ open, onClose, connection, folderId, 
                   onChange={setRdpSettings}
                   mode="connection"
                   resolvedDefaults={mergeRdpConfig(rdpUserDefaults)}
+                />
+              </AccordionDetails>
+            </Accordion>
+          )}
+          {type === 'VNC' && (
+            <Accordion variant="outlined" disableGutters>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="subtitle2">VNC Settings</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <VncSettingsSection
+                  value={vncSettings}
+                  onChange={setVncSettings}
+                  mode="connection"
+                  resolvedDefaults={mergeVncConfig()}
                 />
               </AccordionDetails>
             </Accordion>

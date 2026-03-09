@@ -44,9 +44,18 @@ const rdpSettingsSchema = z.object({
   timezone: z.string().optional(),
 });
 
+const vncSettingsSchema = z.object({
+  colorDepth: z.union([z.literal(8), z.literal(16), z.literal(24), z.literal(32)]).optional(),
+  cursor: z.enum(['local', 'remote']).optional(),
+  readOnly: z.boolean().optional(),
+  clipboardEncoding: z.enum(['ISO8859-1', 'UTF-8', 'UTF-16', 'CP1252']).optional(),
+  swapRedBlue: z.boolean().optional(),
+  disableAudio: z.boolean().optional(),
+});
+
 const createSchema = z.object({
   name: z.string().min(1),
-  type: z.enum(['RDP', 'SSH']),
+  type: z.enum(['RDP', 'SSH', 'VNC']),
   host: z.string().min(1),
   port: z.number().int().min(1).max(65535),
   username: z.string().optional(),
@@ -60,6 +69,7 @@ const createSchema = z.object({
   gatewayId: z.string().uuid().nullable().optional(),
   sshTerminalConfig: sshTerminalConfigSchema.optional(),
   rdpSettings: rdpSettingsSchema.optional(),
+  vncSettings: vncSettingsSchema.optional(),
   defaultCredentialMode: z.enum(['saved', 'domain', 'prompt']).nullable().optional(),
 }).refine(
   (data) => data.credentialSecretId || (data.username !== undefined && data.password !== undefined),
@@ -68,7 +78,7 @@ const createSchema = z.object({
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
-  type: z.enum(['RDP', 'SSH']).optional(),
+  type: z.enum(['RDP', 'SSH', 'VNC']).optional(),
   host: z.string().min(1).optional(),
   port: z.number().int().min(1).max(65535).optional(),
   username: z.string().optional(),
@@ -81,6 +91,7 @@ const updateSchema = z.object({
   gatewayId: z.string().uuid().nullable().optional(),
   sshTerminalConfig: sshTerminalConfigSchema.nullable().optional(),
   rdpSettings: rdpSettingsSchema.nullable().optional(),
+  vncSettings: vncSettingsSchema.nullable().optional(),
   defaultCredentialMode: z.enum(['saved', 'domain', 'prompt']).nullable().optional(),
 });
 

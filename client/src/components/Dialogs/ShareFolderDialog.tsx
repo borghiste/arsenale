@@ -8,6 +8,7 @@ import {
 import {
   Computer as RdpIcon,
   Terminal as SshIcon,
+  DesktopWindows as VncIcon,
 } from '@mui/icons-material';
 import { batchShareConnections, BatchShareResult } from '../../api/sharing.api';
 import { useAuthStore } from '../../store/authStore';
@@ -128,9 +129,11 @@ export default function ShareFolderDialog({
             {folderConnections.map((conn) => (
               <ListItem key={conn.id} sx={{ py: 0.25 }}>
                 <ListItemIcon sx={{ minWidth: 28 }}>
-                  {conn.type === 'RDP'
-                    ? <RdpIcon fontSize="small" color="primary" />
-                    : <SshIcon fontSize="small" color="secondary" />}
+                  {conn.type === 'SSH'
+                    ? <SshIcon fontSize="small" color="secondary" />
+                    : conn.type === 'VNC'
+                    ? <VncIcon fontSize="small" color="info" />
+                    : <RdpIcon fontSize="small" color="primary" />}
                 </ListItemIcon>
                 <ListItemText
                   primary={conn.name}
