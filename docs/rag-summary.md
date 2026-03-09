@@ -112,6 +112,52 @@ Gateway SSH key pairs are automatically rotated on a configurable schedule (defa
 - **Email verification**: configurable email verification for new accounts with support for SMTP, SendGrid, Amazon SES, Resend, and Mailgun providers
 - **Pop-out sessions**: SSH and RDP sessions can be opened in independent browser windows for multi-monitor workflows
 
+## How Arsenale Compares
+
+Arsenale is often compared to Apache Guacamole, since both provide browser-based remote access. However, they target fundamentally different problem spaces. Guacamole is a clientless remote desktop gateway — its sole purpose is proxying RDP, VNC, SSH, and Telnet sessions through a browser. Arsenale is a Privileged Access Management (PAM) platform that uses guacd as its RDP/VNC rendering engine, but builds an entire security and governance layer on top that Guacamole does not provide.
+
+### Arsenale vs Apache Guacamole
+
+**Purpose and scope.** Guacamole is a remote desktop gateway: it connects users to machines and gets out of the way. It has no concept of a credential vault, no encrypted-at-rest secrets, and no sharing governance. Arsenale treats remote access as one function within a broader PAM platform — the core is secure credential management, organizational structure, and auditable sharing, with SSH/RDP/VNC sessions as the delivery mechanism.
+
+**Technology stack.** Guacamole uses a Java webapp (Tomcat/Spring) with a C-based protocol proxy (guacd) and a vanilla JavaScript client. It is a mature, monolithic project. Arsenale is TypeScript end-to-end: React 19 + Vite + MUI + Zustand on the client, Express + Prisma + Socket.IO on the server. It uses guacamole-lite (a lightweight Node.js reimplementation) instead of the Java webapp, and guacamole-common-js for browser-side rendering. The result is a more cohesive, modern stack with a single language across the entire codebase.
+
+**Credential security.** Guacamole stores connection credentials in plaintext in its database (or relies on the database's own access controls). Arsenale encrypts all credentials at rest with AES-256-GCM using per-user master keys derived via Argon2id. The vault auto-locks after configurable inactivity, and even database-level access does not expose secrets. This is the fundamental differentiator for any PAM use case.
+
+**Supported protocols.** Guacamole supports RDP, VNC, SSH, Telnet, and Kubernetes exec, all handled natively by guacd. Arsenale currently supports SSH (directly via the Node.js server using ssh2 + Socket.IO, giving fine-grained session control), RDP (via guacd + guacamole-lite), and VNC (via guacd + guacamole-lite). SSH sessions are not proxied through guacd, which enables features like integrated SFTP, per-session recording in Asciicast format, and tighter session lifecycle management.
+
+**Organization and sharing.** Guacamole offers connection groups (organizational and balancing) and user groups with permission assignments. The UI is functional but admin-oriented. Arsenale provides hierarchical folder trees with drag-and-drop, connection sharing at four granular permission levels (view, use, edit, admin) with credential re-encryption per recipient, team workspaces with shared vaults, favorites, and external secret sharing via time-limited links. The experience is designed to feel like a modern password manager (1Password, Bitwarden) applied to remote connections.
+
+**Authentication.** Guacamole has an extensive ecosystem of authentication extensions: LDAP, SAML, CAS, OpenID Connect, RADIUS, Duo, TOTP, and database auth. This is its historical strength for heterogeneous enterprise environments. Arsenale supports JWT-based auth with automatic token refresh, three MFA methods (TOTP, SMS OTP, WebAuthn), and OAuth/SSO via Google, Microsoft, GitHub, custom OIDC, and SAML 2.0 providers. While the number of identity provider integrations is smaller than Guacamole's, the security model is deeper — with identity verification flows, account lockout, and rate limiting built in.
+
+**Session recording.** Guacamole records sessions natively in its .guac format, convertible to video with guacenc. Arsenale also supports session recording: SSH sessions are captured in Asciicast v2 format (playable with a built-in terminal player), while RDP and VNC sessions are recorded in .guac format via guacd. Recordings are manageable through a dedicated UI with playback, listing, and deletion.
+
+**Audit logging.** Guacamole provides basic connection history with timestamps and IP addresses. Arsenale has comprehensive audit logging with over 56 tracked action types covering authentication, vault operations, sharing, MFA events, session lifecycle, secrets management, team operations, gateway administration, and more. Logs are filterable by action type, date range, IP address, and target, with full pagination and tenant-wide visibility.
+
+**Multi-tenancy.** Guacamole has no built-in multi-tenancy concept. Arsenale provides full tenant isolation — each organization has its own users, teams, connections, secrets, gateways, and audit logs. Tenant administrators can enforce security policies like mandatory MFA, vault timeout caps, and session idle timeouts.
+
+**User experience.** Guacamole's interface is functional but visually dated, with limited customization options. Arsenale offers a modern Material UI interface with dark/light mode, tabbed workspaces for simultaneous sessions, pop-out windows for multi-monitor setups, customizable terminal and RDP settings, persistent UI preferences, and real-time notifications via WebSocket.
+
+**Extensibility.** Guacamole is extensible via Java extension JARs — a traditional, powerful, but rigid model. Arsenale plans a sandboxed Lua plugin system (via fengari/wasmoon), webhook outbound integrations, and MCP server integration. The TypeScript/Node.js architecture is inherently more accessible to modern developers for customization and contribution.
+
+### Summary comparison
+
+| Aspect | Apache Guacamole | Arsenale |
+|--------|-----------------|----------|
+| Category | Remote desktop gateway | Privileged Access Manager |
+| Stack | Java + C + vanilla JS | TypeScript end-to-end |
+| Credential storage | Plaintext in database | AES-256-GCM vault + Argon2id key derivation |
+| Protocols | RDP, VNC, SSH, Telnet, K8s | SSH (native), RDP, VNC (via guacd) |
+| Auth modules | LDAP, SAML, OIDC, CAS, RADIUS, Duo, TOTP | JWT + TOTP + SMS OTP + WebAuthn + OAuth/SAML SSO |
+| Session recording | Native (.guac → video) | Asciicast v2 (SSH) + .guac (RDP/VNC) |
+| Audit logging | Basic connection history | 56+ action types, full filtering |
+| Multi-tenancy | No | Full tenant isolation with policies |
+| Sharing model | User/group permissions | 4-level sharing with credential re-encryption |
+| UI | Functional, admin-oriented | Modern React + MUI, tabs, drag-and-drop |
+| Plugin system | Java extensions | Lua sandboxed plugins (planned) |
+
+The fundamental difference: Guacamole is the engine for remote access, while Arsenale is the platform that uses that engine as a component and adds the entire PAM layer — vault, organization, sharing, governance, and auditing — that Guacamole does not have and does not aim to provide.
+
 ## Deployment
 
 Arsenale is designed to be easy to self-host:
