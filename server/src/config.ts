@@ -177,6 +177,10 @@ export const config = {
   recordingPath: path.resolve(process.env.RECORDING_PATH || '/recordings'),
   recordingVolume: process.env.RECORDING_VOLUME || '',
   recordingRetentionDays: parseInt(process.env.RECORDING_RETENTION_DAYS || '90', 10),
+  // Guacenc video conversion sidecar
+  guacencServiceUrl: process.env.GUACENC_SERVICE_URL || 'http://guacenc:3003',
+  guacencTimeoutMs: parseInt(process.env.GUACENC_TIMEOUT_MS || '120000', 10),
+  guacencRecordingPath: process.env.GUACENC_RECORDING_PATH || '/recordings',
   webauthn: {
     rpId: process.env.WEBAUTHN_RP_ID || 'localhost',
     rpOrigin: process.env.WEBAUTHN_RP_ORIGIN || 'http://localhost:3000',

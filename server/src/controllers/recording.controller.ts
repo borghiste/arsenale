@@ -1,10 +1,12 @@
 import { Response, NextFunction } from 'express';
 import { readFile, stat } from 'fs/promises';
+import fs from 'fs';
 import { z } from 'zod';
 import { AuthRequest } from '../types';
 import * as recordingService from '../services/recording.service';
 import * as auditService from '../services/audit.service';
 import { AppError } from '../middleware/error.middleware';
+import { logger } from '../utils/logger';
 
 const listQuerySchema = z.object({
   connectionId: z.string().uuid().optional(),
@@ -159,6 +161,42 @@ function parseGuacArgs(instruction: string): string[] {
   }
   // First arg is the opcode; return the rest
   return args.slice(1);
+}
+
+export async function exportVideo(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { videoPath, fileSize } = await recordingService.convertToVideo(
+      req.params.id as string,
+      req.user!.userId,
+    );
+
+    const stream = recordingService.streamRecordingFile(videoPath);
+    if (!stream) throw new AppError('Converted video file not found', 500);
+
+    const filename = `recording-${req.params.id}.m4v`;
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', fileSize);
+    stream.pipe(res);
+
+    // Delete the converted video file after successful download to save disk space
+    res.on('finish', () => {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      fs.unlink(videoPath, (err) => {
+        if (err && err.code !== 'ENOENT') logger.error(`[recording] Failed to delete video cache: ${err.message}`);
+      });
+    });
+
+    auditService.log({
+      userId: req.user!.userId,
+      action: 'RECORDING_EXPORT_VIDEO',
+      targetType: 'Recording',
+      targetId: req.params.id as string,
+      ipAddress: req.ip,
+    });
+  } catch (err) {
+    next(err);
+  }
 }
 
 export async function deleteRecording(req: AuthRequest, res: Response, next: NextFunction) {

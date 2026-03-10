@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16
+    container_name: postgres
     environment:
       POSTGRES_USER: arsenale
       POSTGRES_PASSWORD: arsenale_password
@@ -31,6 +32,21 @@ services:
   #     timeout: 5s
   #     retries: 3
   #     start_period: 10s
+
+  guacenc:
+    build:
+      context: docker/guacenc
+      dockerfile: Dockerfile
+    container_name: guacenc
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      - RECORDING_PATH=/recordings
+    volumes:
+      - ${RECORDING_PATH:-./data/recordings}:/recordings:ro
+    networks:
+      - arsenale-dev
 
   # server:
   #   build:

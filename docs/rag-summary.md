@@ -130,7 +130,7 @@ Arsenale is often compared to Apache Guacamole, since both provide browser-based
 
 **Authentication.** Guacamole has an extensive ecosystem of authentication extensions: LDAP, SAML, CAS, OpenID Connect, RADIUS, Duo, TOTP, and database auth. This is its historical strength for heterogeneous enterprise environments. Arsenale supports JWT-based auth with automatic token refresh, three MFA methods (TOTP, SMS OTP, WebAuthn), and OAuth/SSO via Google, Microsoft, GitHub, custom OIDC, and SAML 2.0 providers. While the number of identity provider integrations is smaller than Guacamole's, the security model is deeper — with identity verification flows, account lockout, and rate limiting built in.
 
-**Session recording.** Guacamole records sessions natively in its .guac format, convertible to video with guacenc. Arsenale also supports session recording: SSH sessions are captured in Asciicast v2 format (playable with a built-in terminal player), while RDP and VNC sessions are recorded in .guac format via guacd. Recordings are manageable through a dedicated UI with playback, listing, and deletion.
+**Session recording.** Guacamole records sessions natively in its .guac format, convertible to video with guacenc. Arsenale also supports session recording: SSH sessions are captured in Asciicast v2 format (playable with a built-in terminal player), while RDP and VNC sessions are recorded in .guac format via guacd. Recordings are manageable through a dedicated UI with playback, listing, and deletion. RDP/VNC recordings can be exported as MP4 video files via on-demand server-side conversion using a guacenc sidecar container, enabling playback in any standard media player.
 
 **Audit logging.** Guacamole provides basic connection history with timestamps and IP addresses. Arsenale has comprehensive audit logging with over 56 tracked action types covering authentication, vault operations, sharing, MFA events, session lifecycle, secrets management, team operations, gateway administration, and more. Logs are filterable by action type, date range, IP address, and target, with full pagination and tenant-wide visibility.
 
@@ -149,7 +149,7 @@ Arsenale is often compared to Apache Guacamole, since both provide browser-based
 | Credential storage | Plaintext in database | AES-256-GCM vault + Argon2id key derivation |
 | Protocols | RDP, VNC, SSH, Telnet, K8s | SSH (native), RDP, VNC (via guacd) |
 | Auth modules | LDAP, SAML, OIDC, CAS, RADIUS, Duo, TOTP | JWT + TOTP + SMS OTP + WebAuthn + OAuth/SAML SSO |
-| Session recording | Native (.guac → video) | Asciicast v2 (SSH) + .guac (RDP/VNC) |
+| Session recording | Native (.guac → video) | Asciicast v2 (SSH) + .guac (RDP/VNC) + MP4 export |
 | Audit logging | Basic connection history | 56+ action types, full filtering |
 | Multi-tenancy | No | Full tenant isolation with policies |
 | Sharing model | User/group permissions | 4-level sharing with credential re-encryption |

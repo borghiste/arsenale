@@ -37,6 +37,28 @@ services:
     networks:
       - arsenale_net
 
+  guacenc:
+    build:
+      context: docker/guacenc
+      dockerfile: Dockerfile
+    security_opt:
+      - label:disable
+    volumes:
+      - arsenale_recordings:/recordings
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:3003/health')\" || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - arsenale_net
+
   server:
     build:
       context: .

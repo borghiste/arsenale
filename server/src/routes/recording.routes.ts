@@ -9,6 +9,7 @@ router.get('/', recordingController.listRecordings);
 router.get('/:id', recordingController.getRecording);
 router.get('/:id/stream', recordingController.streamRecording);
 router.get('/:id/analyze', recordingController.analyzeRecording);
+router.get('/:id/video', recordingController.exportVideo);
 router.delete('/:id', recordingController.deleteRecording);
 
 export default router;

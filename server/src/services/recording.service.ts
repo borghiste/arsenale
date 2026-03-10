@@ -5,7 +5,11 @@ import { Readable } from 'stream';
 import prisma from '../lib/prisma';
 import { config } from '../config';
 import { logger } from '../utils/logger';
+import { AppError } from '../middleware/error.middleware';
 import type { SessionProtocol, RecordingStatus } from '../lib/prisma';
+
+// ── Video conversion concurrency lock ────────────────────────────────
+const activeConversions = new Map<string, Promise<{ videoPath: string; fileSize: number }>>();
 
 // ── Asciicast v2 writer (SSH recordings) ────────────────────────────
 
@@ -197,6 +201,12 @@ export async function deleteRecording(recordingId: string, userId: string): Prom
     logger.warn(`Recording file not found on disk: ${recording.filePath}`);
   }
 
+  // Also delete the converted .m4v file if it exists
+  if (recording.format === 'guac') {
+    const m4vPath = recording.filePath + '.m4v';
+    try { await fsp.unlink(m4vPath); } catch { /* may not exist */ }
+  }
+
   await prisma.sessionRecording.delete({ where: { id: recordingId } });
   return true;
 }
@@ -207,6 +217,133 @@ export function streamRecordingFile(filePath: string): Readable | null {
     return fs.createReadStream(filePath);
   } catch {
     return null;
+  }
+}
+
+// ── Video conversion ─────────────────────────────────────────────────
+
+const POLL_INTERVAL_MS = 2000;
+
+/** Translate a host-local recording path to the guacenc container mount path. */
+function toContainerPath(hostPath: string): string {
+  if (hostPath.startsWith(config.recordingPath)) {
+    return config.guacencRecordingPath + hostPath.slice(config.recordingPath.length);
+  }
+  return hostPath;
+}
+
+/** Translate a guacenc container path back to the host-local path. */
+function toHostPath(containerPath: string): string {
+  if (containerPath.startsWith(config.guacencRecordingPath)) {
+    return config.recordingPath + containerPath.slice(config.guacencRecordingPath.length);
+  }
+  return containerPath;
+}
+
+function mapFetchError(err: unknown): AppError {
+  const error = err as NodeJS.ErrnoException & { name?: string; cause?: NodeJS.ErrnoException };
+  if (error.code === 'ECONNREFUSED' || error.cause?.code === 'ECONNREFUSED') {
+    return new AppError('Video conversion service unavailable', 503);
+  }
+  if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+    return new AppError('Video conversion timed out', 504);
+  }
+  return new AppError('Video conversion failed', 500);
+}
+
+export async function convertToVideo(
+  recordingId: string,
+  userId: string,
+): Promise<{ videoPath: string; fileSize: number }> {
+  const recording = await getRecording(recordingId, userId);
+  if (!recording) throw new AppError('Recording not found', 404);
+  if (recording.status !== 'COMPLETE') throw new AppError('Recording is not complete', 400);
+  if (recording.format !== 'guac') throw new AppError('Video export is only available for RDP/VNC recordings', 400);
+
+  const m4vPath = recording.filePath + '.m4v';
+
+  // Return cached file if it already exists
+  try {
+    const stat = await fsp.stat(m4vPath);
+    return { videoPath: m4vPath, fileSize: stat.size };
+  } catch { /* not cached — proceed with conversion */ }
+
+  // Deduplicate concurrent conversion requests for the same recording
+  const existing = activeConversions.get(recordingId);
+  if (existing) return existing;
+
+  const conversionPromise = (async () => {
+    const width = recording.width || 1024;
+    const height = recording.height || 768;
+    const deadline = Date.now() + config.guacencTimeoutMs;
+
+    // Step 1: Submit async conversion job
+    let jobId: string;
+    try {
+      const res = await fetch(`${config.guacencServiceUrl}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath: toContainerPath(recording.filePath), width, height }),
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+        const detail = (body.error as string) || `HTTP ${res.status}`;
+        throw new AppError(`Video conversion failed: ${detail}`, res.status === 503 ? 503 : 500);
+      }
+
+      const result = await res.json() as { jobId: string; status: string };
+      jobId = result.jobId;
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      throw mapFetchError(err);
+    }
+
+    // Step 2: Poll until complete, error, or timeout
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+
+      if (Date.now() >= deadline) break;
+
+      try {
+        const res = await fetch(`${config.guacencServiceUrl}/status/${jobId}`, {
+          signal: AbortSignal.timeout(5_000),
+        });
+
+        if (!res.ok) {
+          throw new AppError('Failed to check conversion status', 500);
+        }
+
+        const job = await res.json() as {
+          jobId: string;
+          status: string;
+          outputPath?: string;
+          fileSize?: number;
+          error?: string;
+        };
+
+        if (job.status === 'complete') {
+          return { videoPath: toHostPath(job.outputPath!), fileSize: job.fileSize! };
+        }
+        if (job.status === 'error') {
+          throw new AppError(`Video conversion failed: ${job.error || 'unknown'}`, 500);
+        }
+        // pending or converting — continue polling
+      } catch (err) {
+        if (err instanceof AppError) throw err;
+        throw mapFetchError(err);
+      }
+    }
+
+    throw new AppError('Video conversion timed out', 504);
+  })();
+
+  activeConversions.set(recordingId, conversionPromise);
+  try {
+    return await conversionPromise;
+  } finally {
+    activeConversions.delete(recordingId);
   }
 }
 
@@ -236,8 +373,24 @@ export async function cleanupExpiredRecordings(): Promise<number> {
     select: { id: true, filePath: true },
   });
 
+  // Optional: Also ask the guacenc sidecar to clean up any orphaned .m4v files
+  try {
+    await fetch(`${config.guacencServiceUrl}/cleanup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ maxAgeDays: config.recordingRetentionDays }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    // Ignore errors — sidecar might be down or not configured
+    logger.warn(`Failed to run guacenc cleanup: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   for (const rec of expired) {
     try { await fsp.unlink(rec.filePath); } catch { /* file may already be gone */ }
+    // Also delete the converted .m4v file if it exists
+    const m4vPath = rec.filePath + '.m4v';
+    try { await fsp.unlink(m4vPath); } catch { /* may not exist */ }
   }
 
   if (expired.length > 0) {

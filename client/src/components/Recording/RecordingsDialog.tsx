@@ -10,7 +10,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
-import { listRecordings, deleteRecording } from '../../api/recordings.api';
+import MovieIcon from '@mui/icons-material/Movie';
+import { listRecordings, deleteRecording, exportRecordingVideo } from '../../api/recordings.api';
 import type { Recording } from '../../api/recordings.api';
 import api from '../../api/client';
 import RecordingPlayerDialog from './RecordingPlayerDialog';
@@ -35,6 +36,7 @@ export default function RecordingsDialog({ open, onClose }: RecordingsDialogProp
   const [page, setPage] = useState(0);
   const [playingRecording, setPlayingRecording] = useState<Recording | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Recording | null>(null);
+  const [convertingIds, setConvertingIds] = useState<Set<string>>(new Set());
   const limit = 25;
 
   const fetchRecordings = useCallback(async () => {
@@ -92,6 +94,27 @@ export default function RecordingsDialog({ open, onClose }: RecordingsDialogProp
     a.download = `recording-${rec.id}.${rec.format === 'asciicast' ? 'cast' : rec.format}`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadVideo = async (rec: Recording) => {
+    setConvertingIds((prev) => new Set(prev).add(rec.id));
+    try {
+      const blob = await exportRecordingVideo(rec.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `recording-${rec.id}.m4v`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silently handle
+    } finally {
+      setConvertingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(rec.id);
+        return next;
+      });
+    }
   };
 
   const protocolColor = (protocol: string) => {
@@ -187,6 +210,23 @@ export default function RecordingsDialog({ open, onClose }: RecordingsDialogProp
                             <DownloadIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
+                        {rec.format === 'guac' && (
+                          <Tooltip title="Download MP4">
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleDownloadVideo(rec)}
+                                disabled={convertingIds.has(rec.id)}
+                              >
+                                {convertingIds.has(rec.id) ? (
+                                  <CircularProgress size={18} />
+                                ) : (
+                                  <MovieIcon fontSize="small" />
+                                )}
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        )}
                         <Tooltip title="Delete">
                           <IconButton size="small" onClick={() => setDeleteTarget(rec)}>
                             <DeleteIcon fontSize="small" />

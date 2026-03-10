@@ -56,3 +56,11 @@ export async function deleteRecording(id: string): Promise<void> {
 export function getRecordingStreamUrl(id: string): string {
   return `/api/recordings/${id}/stream`;
 }
+
+export async function exportRecordingVideo(id: string): Promise<Blob> {
+  const { data } = await api.get(`/recordings/${id}/video`, {
+    responseType: 'blob',
+    timeout: 130000,
+  });
+  return data;
+}
