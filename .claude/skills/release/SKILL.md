@@ -3,7 +3,7 @@ name: release
 description: Manage semantic versioning, changelog generation, and git tagging.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write, AskUserQuestion
-argument-hint: "[major|minor|patch] or empty for auto-detection"
+argument-hint: "[major|minor|patch|stable] or empty for auto-detection"
 ---
 
 # Release a New Version
@@ -72,6 +72,8 @@ From the "Current State" section:
 Store:
 - `LAST_TAG` — the most recent `v*` tag (or empty if none)
 - `CURRENT_VERSION` — the version string from `package.json` (e.g., `1.0.0`)
+- `IS_BETA` — `true` if `CURRENT_VERSION` ends with `-beta`, `false` otherwise
+- `BASE_VERSION` — `CURRENT_VERSION` with the `-beta` suffix stripped (e.g., `2.0.0-beta` → `2.0.0`). Equals `CURRENT_VERSION` when `IS_BETA` is `false`
 
 ### Step 3: Collect Changes Since Last Release
 
@@ -109,6 +111,30 @@ STOP HERE after calling `AskUserQuestion`. Do NOT proceed until the user respond
 
 ### Step 4: Suggest Version Bump
 
+#### 4a: Beta promotion check
+
+**If `$ARGUMENTS` is `stable` or `promote`:**
+
+If `IS_BETA` is `false`, warn the user: "No beta version to promote — current version is `CURRENT_VERSION`." and stop.
+
+If `IS_BETA` is `true`, set `NEW_VERSION = BASE_VERSION` and skip to Step 4c.
+
+**If `IS_BETA` is `true` (and `$ARGUMENTS` is NOT `stable`/`promote`):**
+
+The current version is a beta. Present to the user:
+
+> Current version is **CURRENT_VERSION** (beta release).
+
+Use `AskUserQuestion` with these options:
+- **"Promote to stable vBASE_VERSION"** — finalize the beta as a stable release
+- **"Cancel"** — stop here
+
+STOP HERE after calling `AskUserQuestion`. Do NOT proceed until the user responds.
+
+If promoting: set `NEW_VERSION = BASE_VERSION` and skip to Step 4c.
+
+#### 4b: Determine bump type
+
 Classify detected changes to determine the bump type:
 
 | Change type | Bump | Trigger |
@@ -121,17 +147,30 @@ Classify detected changes to determine the bump type:
 
 **If `$ARGUMENTS` contains `major`, `minor`, or `patch`:** use that override instead of auto-detection.
 
-Calculate the new version by incrementing `CURRENT_VERSION`:
+Calculate the new version by incrementing `BASE_VERSION`:
 - **major**: `X.0.0` (reset minor and patch)
 - **minor**: `M.X.0` (reset patch)
 - **patch**: `M.N.X`
 
+**Major bumps always start as beta.** If the bump type is `major`, append `-beta` to the version:
+- `X.0.0` becomes `X.0.0-beta`
+
+#### 4c: Confirm version
+
 Present to the user:
 
+If the version ends with `-beta`:
+> **Version bump:** `CURRENT_VERSION` → `NEW_VERSION` (major beta — N new features, M fixes detected)
+> Major releases go through a beta phase first. Run `/release stable` to promote later.
+
+If promoting from beta:
+> **Promoting:** `CURRENT_VERSION` → `NEW_VERSION` (beta → stable)
+
+Otherwise:
 > **Version bump:** `CURRENT_VERSION` → `NEW_VERSION` (`TYPE` — N new features, M fixes detected)
 
 Use `AskUserQuestion` with these options:
-- **"Use vX.Y.Z"** — proceed with the suggested version
+- **"Use vNEW_VERSION"** — proceed with the suggested version
 - **"I want a different version"** — wait for the user to specify
 - **"Cancel release"** — stop here
 
@@ -225,16 +264,15 @@ Present a summary of all changes:
 > - CHANGELOG.md updated with N entries across M categories
 > - Version bumped in 3 package.json files
 > - Will commit as: `chore(release): vX.Y.Z`
-> - Will create annotated tag: `vX.Y.Z`
 
 Use `AskUserQuestion` with these options:
-- **"Commit and tag"** — proceed to Step 10
+- **"Commit"** — proceed to Step 10
 - **"Show me the diff first"** — run `git diff` and present it, then ask again
 - **"Cancel release"** — revert all changes with `git checkout -- .` and stop
 
 STOP HERE after calling `AskUserQuestion`. Do NOT proceed until the user responds.
 
-### Step 10: Commit and Tag
+### Step 10: Commit
 
 Stage and commit the version bump:
 
@@ -243,25 +281,60 @@ git add package.json server/package.json client/package.json CHANGELOG.md
 git commit -m "chore(release): vX.Y.Z"
 ```
 
-Create an annotated git tag:
-
-```bash
-git tag -a vX.Y.Z -m "Release vX.Y.Z"
-```
-
 ### Step 11: Report
 
-Present the release summary:
+**If the release is a beta** (version ends with `-beta`):
+
+> **Beta release vX.Y.Z-beta completed successfully:**
+> - Version bumped in 3 package.json files
+> - CHANGELOG.md updated with N entries
+> - Commit: `chore(release): vX.Y.Z-beta`
+> - The GitHub release will be marked as a **prerelease**
+>
+> **Next steps:**
+> 1. Run `/git-publish` to push `develop` and create a PR to `main`.
+> 2. After the PR merges, tag the release on `main`:
+>    ```
+>    git fetch origin main
+>    git tag -a vX.Y.Z-beta origin/main -m "Release vX.Y.Z-beta"
+>    git push origin vX.Y.Z-beta
+>    ```
+>    Pushing the tag triggers the Release and Docker Build workflows.
+> 3. To promote to stable later, run `/release stable`.
+
+**If the release is a promotion from beta:**
+
+> **Release vX.Y.Z promoted from beta:**
+> - Version bumped from `X.Y.Z-beta` to `X.Y.Z` in 3 package.json files
+> - CHANGELOG.md updated
+> - Commit: `chore(release): vX.Y.Z`
+>
+> **Next steps:**
+> 1. Run `/git-publish` to push `develop` and create a PR to `main`.
+> 2. After the PR merges, tag the stable release on `main`:
+>    ```
+>    git fetch origin main
+>    git tag -a vX.Y.Z origin/main -m "Release vX.Y.Z"
+>    git push origin vX.Y.Z
+>    ```
+>    Pushing the tag triggers the Release and Docker Build workflows.
+
+**Otherwise (minor/patch release):**
 
 > **Release vX.Y.Z completed successfully:**
 > - Version bumped in 3 package.json files
 > - CHANGELOG.md updated with N entries
 > - Commit: `chore(release): vX.Y.Z`
-> - Tag: `vX.Y.Z` (annotated)
 >
 > **Next steps:**
-> - Run `/git-publish` to merge `develop` into `main` and push both branches with tags
-> - Or push manually: `git push origin develop --tags`
+> 1. Run `/git-publish` to push `develop` and create a PR to `main`.
+> 2. After the PR merges, tag the release on `main`:
+>    ```
+>    git fetch origin main
+>    git tag -a vX.Y.Z origin/main -m "Release vX.Y.Z"
+>    git push origin vX.Y.Z
+>    ```
+>    Pushing the tag triggers the Release and Docker Build workflows.
 
 ## Important Rules
 
@@ -272,3 +345,5 @@ Present the release summary:
 5. **Exclude non-user-facing commits from the changelog** — `chore:`, `ci:`, `test:`, `docs:`, `style:`, `build:` commits should not appear in the changelog.
 6. **Preserve the Keep a Changelog format exactly** — match the structure, link format, and section ordering of the existing `CHANGELOG.md`.
 7. **All output must be in English.**
+8. **Major releases MUST go through beta first** — a major bump always produces `X.0.0-beta`. The beta stays until the user explicitly runs `/release stable` to promote it.
+9. **NEVER promote a non-beta version** — if the current version does not end with `-beta`, the `stable`/`promote` argument must be rejected.

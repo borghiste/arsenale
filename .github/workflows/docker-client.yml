@@ -1,15 +1,21 @@
-name: SSH Gateway — Build & Scan
+name: Docker Client
 
 on:
   push:
     tags: ['v*']
     branches: [main]
     paths:
-      - 'ssh-gateway/**'
+      - 'client/**'
+      - '!client/**/*.md'
+      - 'package.json'
+      - 'package-lock.json'
   pull_request:
     branches: [main]
     paths:
-      - 'ssh-gateway/**'
+      - 'client/**'
+      - '!client/**/*.md'
+      - 'package.json'
+      - 'package-lock.json'
   schedule:
     - cron: '0 6 1 * *'
   workflow_dispatch:
@@ -20,7 +26,6 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/ssh-gateway
 
 jobs:
   build-and-scan:
@@ -49,7 +54,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/client
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -60,37 +65,36 @@ jobs:
       - name: Build image for scanning
         uses: docker/build-push-action@v5
         with:
-          context: ./ssh-gateway
-          file: ./ssh-gateway/Dockerfile
+          context: .
+          file: ./client/Dockerfile
           push: false
           load: true
-          tags: ssh-gateway:scan
-          cache-from: type=gha,scope=ssh-gateway
-          cache-to: type=gha,mode=max,scope=ssh-gateway
+          tags: arsenale-client:scan
+          cache-from: type=gha,scope=client
+          cache-to: type=gha,mode=max,scope=client
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ssh-gateway:scan
+          image-ref: arsenale-client:scan
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
 
-      - name: Upload Trivy scan results to GitHub Security tab
+      - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: trivy-results.sarif
-          category: trivy-ssh-gateway
+          category: trivy-client
 
       - name: Push to registry
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: docker/build-push-action@v5
         with:
-          context: ./ssh-gateway
-          file: ./ssh-gateway/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          context: .
+          file: ./client/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=ssh-gateway
+          cache-from: type=gha,scope=client
