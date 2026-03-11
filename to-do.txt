@@ -236,7 +236,83 @@
   SEZIONE F — PASSWORD KEYCHAIN / SECRET VAULT
 ================================================================================
 
+------------------------------------------------------------------------------
+[ ] VAULT-203 — Struttura a cartelle nella Keychain (come le connessioni)
+------------------------------------------------------------------------------
+  Priorita: MEDIA
+  Dipendenze: Nessuna
 
+  DESCRIZIONE:
+  Il modello VaultFolder esiste gia' nello schema Prisma con supporto
+  gerarchico (parentId) e multi-scope (personal/team/tenant), ma non ha
+  alcuna implementazione ne' lato server ne' lato client. I segreti nel
+  keychain vengono attualmente mostrati come lista piatta con filtri per
+  scope e tipo. Questo task implementa l'intero stack CRUD per le cartelle
+  del vault e integra la navigazione ad albero nel KeychainDialog con layout
+  a 3 colonne (albero | lista segreti | dettaglio), replicando il pattern
+  gia' usato per le connessioni (ConnectionTree / FolderDialog), incluso
+  drag-and-drop dei segreti tra cartelle tramite dnd-kit.
+
+  DETTAGLI TECNICI:
+
+  1. Backend — CRUD VaultFolder
+     - Creare route vault-folders.routes.ts con endpoint:
+       GET    /api/vault-folders          → lista ad albero (personal + team + tenant)
+       POST   /api/vault-folders          → crea cartella (name, scope, parentId?)
+       PUT    /api/vault-folders/:id      → rinomina / sposta (parentId)
+       DELETE /api/vault-folders/:id      → elimina, ricollega figli al parent
+     - Creare controller vault-folders.controller.ts con validazione Zod
+       (riusare pattern di folders.controller.ts e middleware REFAC-201)
+     - Creare service vault-folder.service.ts con logica:
+       getFolderTree(userId, teamIds, tenantId) → { personal, team, tenant }
+       createFolder / updateFolder / deleteFolder
+       Prevenire riferimenti circolari come in folder.service.ts
+     - Montare le route in app.ts sotto /api/vault-folders
+
+  2. Backend — Filtro folderId nei segreti
+     - Verificare che secret.service.ts filtri per folderId nella query
+       Prisma di listSecrets; in caso contrario aggiungere il filtro
+     - Aggiungere query param folderId nella route GET /api/secrets
+
+  3. Client — API e Store
+     - Creare vault-folders.api.ts con chiamate CRUD (seguire folders.api.ts)
+     - Estendere secretStore.ts:
+       - Aggiungere stato: vaultFolders[], vaultTeamFolders[],
+         vaultTenantFolders[], selectedFolderId
+       - Metodi: fetchVaultFolders(), moveSecret(secretId, folderId)
+       - Aggiornare fetchSecrets() per passare selectedFolderId come filtro
+
+  4. Client — UI nel KeychainDialog (layout 3 colonne + DnD)
+     - Creare SecretTree.tsx in components/Keychain/ replicando il pattern
+       di ConnectionTree.tsx:
+       - Albero gerarchico di VaultFolder con expand/collapse
+       - Nodo "Tutti i segreti" (senza filtro cartella)
+       - Nodo "Preferiti" per segreti con isFavorite
+       - Sezione team/tenant folders raggruppata per scope
+       - Click su cartella → filtra SecretListPanel per folderId
+       - Context menu: Rinomina, Sposta, Elimina cartella
+       - Drag-and-drop segreti tra cartelle tramite @dnd-kit
+     - Creare VaultFolderDialog.tsx per creazione/modifica cartelle
+       (seguire FolderDialog.tsx)
+     - Modificare KeychainDialog.tsx: layout a 3 colonne
+       (tree | lista segreti | dettaglio), pannello tree collassabile
+     - Persistere stati expand/collapse in uiPreferencesStore con chiavi
+       keychainFolderExpandState e keychainTreeOpen
+
+  File coinvolti:
+    CREARE:     server/src/routes/vault-folders.routes.ts
+    CREARE:     server/src/controllers/vault-folders.controller.ts
+    CREARE:     server/src/services/vault-folder.service.ts
+    CREARE:     client/src/api/vault-folders.api.ts
+    CREARE:     client/src/components/Keychain/SecretTree.tsx
+    CREARE:     client/src/components/Keychain/VaultFolderDialog.tsx
+    MODIFICARE: server/src/app.ts
+    MODIFICARE: server/src/routes/secret.routes.ts
+    MODIFICARE: server/src/services/secret.service.ts
+    MODIFICARE: client/src/store/secretStore.ts
+    MODIFICARE: client/src/components/Dialogs/KeychainDialog.tsx
+    MODIFICARE: client/src/components/Keychain/SecretListPanel.tsx
+    MODIFICARE: client/src/store/uiPreferencesStore.ts
 
 
 
@@ -1533,6 +1609,230 @@
   4) Se intercetta pattern (es. `rm -rf /`, `DROP TABLE`), droppa il pacchetto 
      (evitando l'esecuzione remota), chiude la sessione (`session.end()`)
   5) Trigger Audit log: SESSION_TERMINATED_POLICY_VIOLATION
-  6) Notifica immediata via notification.service e (se configurato) webhook 
+  6) Notifica immediata via notification.service e (se configurato) webhook
      esterno (es. Slack/Teams)
 
+
+# Scouted 2025-03-11 — Browser Extension
+
+------------------------------------------------------------------------------
+[ ] BEXT-101 — Scaffold browser extension with Manifest V3 and multi-account management
+------------------------------------------------------------------------------
+  Priorita: ALTA
+  Dipendenze: Nessuna
+
+  DESCRIZIONE:
+  Create the foundational browser extension project as a new workspace in the
+  monorepo (clients/browser-extensions/). This task covers the Chrome
+  Manifest V3 scaffold, Vite + React + TypeScript build toolchain (matching
+  multi-account settings UI where users add, edit, remove, and switch between
+  Arsenale server instances (each with its own URL, user identity, and stored
+  tokens). The popup shell includes an account selector dropdown, vault status
+  indicator, and placeholder sections for Keychain and Connections.
+
+  DETTAGLI TECNICI:
+  1) New clients/browser-extensions/ workspace added to root package.json
+     workspaces array. Manifest V3 targeting Chrome primary, Firefox secondary
+     via polyfill/WXT.
+  2) Service worker (background.ts) handles ALL API calls to Arsenale servers,
+     bypassing CORS entirely. Popup/options pages communicate with the service
+     worker via chrome.runtime.sendMessage.
+  3) Multi-account storage in chrome.storage.local. Each account entry:
+     { id, label, serverUrl, userId, email, accessToken, tenantId?,
+       tenantName?, lastUsed, vaultUnlocked }
+  4) Settings/options page: list configured accounts, add account form with
+     /api/health connectivity check, edit label, remove, set default.
+  5) Popup shell: account switcher dropdown at top, vault lock/unlock status,
+     tabbed sections for Keychain (BEXT-103) and Connections (BEXT-104).
+  6) Build scripts: npm run dev:extension (Vite watch + HMR),
+     npm run build:extension (production dist/).
+     Add clients/browser-extensions/ to root verify script for typecheck
+     and lint.
+
+  File coinvolti:
+    CREARE:  clients/browser-extensions/ (new workspace directory)
+    CREARE:  clients/browser-extensions/manifest.json
+    CREARE:  clients/browser-extensions/src/background.ts (service worker)
+    CREARE:  clients/browser-extensions/src/popup/ (React popup app)
+    CREARE:  clients/browser-extensions/src/options/ (React options/settings)
+    CREARE:  clients/browser-extensions/src/lib/accountStore.ts
+    CREARE:  clients/browser-extensions/src/lib/apiClient.ts
+    CREARE:  clients/browser-extensions/vite.config.ts, tsconfig.json, package.json
+    MODIFICARE: package.json (add browser-extensions workspace)
+
+
+------------------------------------------------------------------------------
+[ ] BEXT-102 — Extension authentication flow with JWT, CSRF, and MFA support
+------------------------------------------------------------------------------
+  Priorita: ALTA
+  Dipendenze: BEXT-101
+
+  DESCRIZIONE:
+  Implement the full authentication lifecycle for the browser extension:
+  login (email+password), MFA challenge handling (TOTP, SMS, WebAuthn),
+  token storage, automatic refresh, tenant switching, and logout. Since the
+  extension cannot rely on httpOnly cookies (different origin), the server
+  refresh endpoint must accept the refresh token from the request body as a
+  fallback. CSRF validation is skipped for extension clients (immune to CSRF).
+
+  DETTAGLI TECNICI:
+  1) Server-side change: modify auth.controller.ts refresh() to accept
+     refreshToken from req.body when cookie is absent. Skip CSRF validation
+     for requests with valid Bearer token and no cookies (extension context).
+  2) Login flow in popup: email+password form. If requiresMFA, show TOTP
+     code input, SMS request+verify, or WebAuthn challenge. If
+     mfaSetupRequired, open Arsenale web UI in a new tab for setup.
+  3) On success: store accessToken and refreshToken in chrome.storage.local
+     per account entry.
+  4) Token refresh: chrome.alarms API sets alarm for (JWT expiry - 60s).
+     Service worker calls refresh endpoint with token in body. If refresh
+     fails (401), mark account as "session expired" and show badge.
+  5) Tenant switching: after login, if tenantMemberships has multiple
+     entries, show tenant picker. Call POST /api/auth/switch-tenant.
+  6) Logout: call POST /api/auth/logout with refresh token in body, clear
+     stored tokens for the account.
+
+  File coinvolti:
+    CREARE:  clients/browser-extensions/src/lib/auth.ts
+    CREARE:  clients/browser-extensions/src/popup/pages/LoginPage.tsx
+    CREARE:  clients/browser-extensions/src/popup/pages/MfaPage.tsx
+    CREARE:  clients/browser-extensions/src/popup/pages/TenantPickerPage.tsx
+    MODIFICARE: server/src/controllers/auth.controller.ts (body refresh token)
+    MODIFICARE: server/src/middleware/csrf.middleware.ts (extension bypass)
+
+
+------------------------------------------------------------------------------
+[ ] BEXT-103 — Keychain integration: vault unlock, secret listing, and copy
+------------------------------------------------------------------------------
+  Priorita: MEDIA
+  Dipendenze: BEXT-102
+
+  DESCRIZIONE:
+  Add vault unlock and keychain browsing to the extension popup. Users can
+  unlock the vault (via password or MFA), browse secrets by type and folder,
+  search, view secret details, and copy individual fields (username, password,
+  API key, etc.) to the clipboard with auto-clear after 30 seconds. Decrypted
+  secret data is NEVER cached in chrome.storage — only held in popup memory.
+
+  DETTAGLI TECNICI:
+  1) Vault status: on popup open, call GET /api/vault/status. If locked,
+     show unlock prompt (password or MFA buttons). Display vault lock status
+     in popup header per-account.
+  2) Secret listing: call GET /api/secrets with filters (scope, type, search,
+     tags, folderId, isFavorite). Compact scrollable list with type icons
+     (LOGIN, SSH_KEY, CERTIFICATE, API_KEY, SECURE_NOTE). Search bar, folder
+     navigation via GET /api/vault-folders, favorites toggle.
+  3) Secret detail: click to expand/open detail view. Call GET /api/secrets/:id
+     for full decrypted data. Copy button per field using
+     navigator.clipboard.writeText(). Password fields masked by default with
+     reveal toggle.
+  4) Clipboard auto-clear: chrome.alarms fires after 30s (configurable) to
+     clear clipboard via navigator.clipboard.writeText('').
+  5) If vault auto-lock fires server-side (TTL expires), detect on next API
+     call failure and re-prompt for unlock.
+
+  File coinvolti:
+    CREARE:  clients/browser-extensions/src/popup/pages/KeychainPage.tsx
+    CREARE:  clients/browser-extensions/src/popup/components/VaultUnlockForm.tsx
+    CREARE:  clients/browser-extensions/src/popup/components/SecretList.tsx
+    CREARE:  clients/browser-extensions/src/popup/components/SecretDetail.tsx
+    CREARE:  clients/browser-extensions/src/lib/vaultApi.ts
+    CREARE:  clients/browser-extensions/src/lib/secretsApi.ts
+    CREARE:  clients/browser-extensions/src/lib/clipboard.ts (copy + auto-clear)
+
+
+------------------------------------------------------------------------------
+[ ] BEXT-104 — Connection listing and one-click session launch in browser tab
+------------------------------------------------------------------------------
+  Priorita: MEDIA
+  Dipendenze: BEXT-102
+
+  DESCRIZIONE:
+  Add connection browsing and one-click session launch to the extension popup.
+  Users see their RDP, SSH, and VNC connections organized by scope and folder,
+  and can click to open the connection in the Arsenale web UI in a new browser
+  tab. The extension does NOT embed viewers — it deep-links into the web
+  client via an autoconnect query parameter.
+
+  DETTAGLI TECNICI:
+  1) Connection listing: call GET /api/connections, display grouped by scope
+     (My / Shared / Team) or by folder. Show type icon (RDP/SSH/VNC), name,
+     host, favorite status. Search/filter bar. Favorite toggle via
+     PATCH /api/connections/:id/favorite.
+  2) One-click launch: open new browser tab to {serverUrl}/?autoconnect={id}.
+     The web client Dashboard page reads the autoconnect query param on mount
+     and auto-opens a tab for that connection.
+  3) Client-side change: add autoconnect query param handling to Dashboard.
+     On mount, if param present and user authenticated, open the connection.
+     Login page preserves autoconnect param on redirect.
+  4) Quick info: secondary action on connection shows host:port, description,
+     linked credential name. Option to copy host:port to clipboard.
+
+  File coinvolti:
+    CREARE:  clients/browser-extensions/src/popup/pages/ConnectionsPage.tsx
+    CREARE:  clients/browser-extensions/src/popup/components/ConnectionList.tsx
+    CREARE:  clients/browser-extensions/src/popup/components/ConnectionItem.tsx
+    CREARE:  clients/browser-extensions/src/lib/connectionsApi.ts
+    MODIFICARE: client/src/pages/Dashboard.tsx (autoconnect query param)
+    MODIFICARE: client/src/pages/Login.tsx (preserve autoconnect on redirect)
+
+
+------------------------------------------------------------------------------
+[ ] BEXT-105 — Contextual credential autofill on web pages (content script)
+------------------------------------------------------------------------------
+  Priorita: BASSA
+  Dipendenze: BEXT-103
+
+  DESCRIZIONE:
+  Implement a content script that detects login forms on web pages, matches
+  them against LOGIN-type secrets in the keychain by URL/domain, and offers
+  to autofill username and password fields. This is the most complex BEXT
+  task and is intentionally low priority — core value is delivered by
+  BEXT-103 and BEXT-104.
+
+  DETTAGLI TECNICI:
+  1) Content script (content_scripts in manifest) scans page DOM for login
+     forms: input[type=password], nearby text/email inputs, form elements.
+     Communicates with service worker via chrome.runtime.sendMessage.
+  2) URL/domain matching: service worker maintains a lightweight index of
+     { secretId, url, domain, name } from cached listSecrets response
+     (refreshed periodically or on popup open). Match current page URL
+     against secret.data.url (prefix) or domain.
+  3) Autofill UI: if matches found, inject floating icon near detected
+     fields via shadow DOM (isolates from host page styles/CSP). Click shows
+     dropdown of matching credentials (name + username). On selection, fetch
+     full secret data via service worker, fill form fields.
+  4) If vault is locked, show inline prompt to unlock first.
+  5) Badge: update extension badge with matching credential count for
+     current tab (chrome.tabs.onUpdated / onActivated).
+  6) Preferences: allow disabling autofill per-site or globally in
+     extension options page.
+
+  File coinvolti:
+    CREARE:  clients/browser-extensions/src/content/autofill.ts (content script)
+    CREARE:  clients/browser-extensions/src/content/formDetector.ts (DOM scanning)
+    CREARE:  clients/browser-extensions/src/content/autofillUI.ts (shadow DOM dropdown)
+    CREARE:  clients/browser-extensions/src/lib/urlMatcher.ts (URL/domain matching)
+    MODIFICARE: clients/browser-extensions/manifest.json (content_scripts, permissions)
+    MODIFICARE: clients/browser-extensions/src/options/ (autofill preferences)
+
+# Scouted 2026-03-11 — PWA (Progressive Web App)
+
+[ ] PWA-001 — Core PWA: manifest, service worker, and installability via vite-plugin-pwa
+  Install vite-plugin-pwa, configure web app manifest (name, icons, display: standalone,
+  theme_color), add missing meta tags to index.html (theme-color, description,
+  apple-mobile-web-app-capable), configure online-first caching strategy for static assets
+  only (no API/WebSocket caching), add service worker registration. Existing icons in
+  client/public/ (192, 512, maskable variants) are ready to use. Test install prompt on
+  Chrome, Edge, Safari desktop.
+
+[ ] PWA-002 — PWA update notification: prompt user to reload when new version is available
+  Detect service worker updates via onNeedRefresh callback from vite-plugin-pwa's
+  useRegisterSW hook. Show a non-intrusive MUI Snackbar prompting user to reload for the
+  latest version. Handle skipWaiting + clients.claim for seamless update. Critical for
+  security-sensitive app to avoid running stale cached code.
+
+[ ] PWA-003 — PWA app shortcuts for quick actions (New Connection, Open Keychain)
+  Add shortcuts array to the web app manifest with 2-3 quick actions (e.g. "New Connection",
+  "Open Keychain"). Each shortcut deep-links to the app with a query param that triggers the
+  corresponding dialog. Enables right-click taskbar icon quick access on desktop PWA installs.

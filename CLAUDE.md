@@ -53,7 +53,7 @@ Copy `.env.example` to `.env`. PostgreSQL is used in both development and produc
 
 ## Architecture
 
-**Monorepo** with npm workspaces: `server/` and `client/`.
+**Monorepo** with npm workspaces: `server/`, `client/`, and `clients/browser-extensions/`.
 
 ### Server (Express + TypeScript)
 
@@ -77,6 +77,15 @@ Layered architecture: **Routes → Controllers → Services → Prisma ORM**
 - `client/src/components/` — UI components (Layout, RDP viewer, Terminal, Dialogs, Tabs)
 - `client/src/hooks/` — Custom hooks (`useAuth`, `useSocket`)
 - UI framework: Material-UI (MUI) v6
+
+### Browser Extension (Chrome Manifest V3)
+
+- `clients/browser-extensions/` — Browser extension workspace (Chrome primary, Firefox secondary)
+- `clients/browser-extensions/src/background.ts` — Service worker: handles all API calls to Arsenale servers (bypasses CORS), token refresh via chrome.alarms
+- `clients/browser-extensions/src/popup/` — React popup app: account switcher, keychain browsing, connection listing
+- `clients/browser-extensions/src/options/` — React options/settings page: multi-account management, server URL configuration
+- `clients/browser-extensions/src/content/` — Content scripts for credential autofill on web pages
+- `clients/browser-extensions/src/lib/` — Shared utilities: account storage, API client, auth, vault/secrets/connections API wrappers
 
 ## Key Patterns
 
