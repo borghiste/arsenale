@@ -25,36 +25,6 @@
 
 
 
-------------------------------------------------------------------------------
-[ ] OPT-201 — Lazy-load full-screen dialogs in MainLayout
-------------------------------------------------------------------------------
-  Priorita: ALTA
-  Dipendenze: REFAC-202 (SlideUp extraction should happen first)
-
-  DESCRIZIONE:
-  MainLayout.tsx eagerly imports 13+ dialog components at the top level, all
-  rendered conditionally behind open boolean state. These include heavy
-  components (audit log tables, recording players, settings tabs). Converting
-  to React.lazy() with Suspense will reduce the initial bundle size and
-  improve first paint time.
-
-  DETTAGLI IMPLEMENTAZIONE:
-  1. Convert all 13+ dialog imports in MainLayout.tsx to React.lazy() calls.
-  2. Wrap each lazy dialog in <Suspense fallback={null}>.
-  3. Verify Vite code-splitting generates separate chunks for each dialog.
-  4. Measure bundle size before/after.
-
-  FILE COINVOLTI:
-  - client/src/components/Layout/MainLayout.tsx (primary)
-  - Vite config if manual chunk hints are needed
-
-  CRITERI DI ACCETTAZIONE:
-  - All dialog imports use React.lazy()
-  - npm run build produces separate chunks for dialogs
-  - Initial bundle size measurably reduced
-  - Dialogs still open correctly with no flash or error
-  - npm run verify passes
-
 
 ------------------------------------------------------------------------------
 [ ] SEC-201 — Rate limiting on vault unlock and session creation endpoints

@@ -3195,3 +3195,14 @@
   - 43 files (inline error cast replacement)
   - CLAUDE.md (updated patterns)
 
+------------------------------------------------------------------------------
+[x] OPT-201 — Lazy-load full-screen dialogs in MainLayout
+------------------------------------------------------------------------------
+  Priorita: ALTA
+  Dipendenze: REFAC-202 (SlideUp extraction should happen first)
+  COMPLETATO: Converted all 14 dialog imports in MainLayout.tsx to React.lazy() with conditional Suspense wrappers. Created useLazyMount hook to preserve close animations by keeping dialogs mounted after first open. Build produces 14 separate dialog chunks (~230 KB removed from initial bundle). npm run verify passes.
+
+  FILE COINVOLTI:
+  - client/src/components/Layout/MainLayout.tsx (modified)
+  - client/src/hooks/useLazyMount.ts (new)
+
