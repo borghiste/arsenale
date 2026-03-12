@@ -43,13 +43,19 @@ gh issue list --repo "$TRACKER_REPO" --label "task,status:done" --state closed -
 ### Local/Dual mode:
 
 #### Pending tasks:
-!`python3 .claude/scripts/task_manager.py list --status todo --format summary`
+```bash
+python3 .claude/scripts/task_manager.py list --status todo --format summary
+```
 
 #### Completed tasks:
-!`python3 .claude/scripts/task_manager.py list --status done --format summary`
+```bash
+python3 .claude/scripts/task_manager.py list --status done --format summary
+```
 
 #### Recommended implementation order:
-!`python3 .claude/scripts/task_manager.py sections --file to-do.txt`
+```bash
+python3 .claude/scripts/task_manager.py sections --file to-do.txt
+```
 
 ## Instructions
 
