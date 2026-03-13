@@ -1,20 +1,17 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Box, CircularProgress, Typography, Alert } from '@mui/material';
-import {
-  Fullscreen as FullscreenIcon,
-  FullscreenExit as FullscreenExitIcon,
-} from '@mui/icons-material';
 import * as Guacamole from '@glokon/guacamole-common-js';
 import { io } from 'socket.io-client';
 import api from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
 import type { CredentialOverride } from '../../store/tabsStore';
 import type { ResolvedDlpPolicy } from '../../api/connections.api';
-import FloatingToolbar, { ToolbarAction } from '../shared/FloatingToolbar';
+import DockedToolbar from '../shared/DockedToolbar';
 import ReconnectOverlay from '../shared/ReconnectOverlay';
 import { extractApiError } from '../../utils/apiError';
 import { useAutoReconnect } from '../../hooks/useAutoReconnect';
 import { useKeyboardCapture } from '../../hooks/useKeyboardCapture';
+import { useGuacToolbarActions } from '../../hooks/useGuacToolbarActions';
 import { isGuacPermanentError } from '../../utils/reconnectClassifier';
 
 interface VncViewerProps {
@@ -24,7 +21,7 @@ interface VncViewerProps {
   credentials?: CredentialOverride;
 }
 
-export default function VncViewer({ connectionId, tabId: _tabId, isActive = true, credentials }: VncViewerProps) {
+export default function VncViewer({ connectionId, tabId, isActive = true, credentials }: VncViewerProps) {
   const displayRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<Guacamole.Client | null>(null);
@@ -246,7 +243,7 @@ export default function VncViewer({ connectionId, tabId: _tabId, isActive = true
   useEffect(() => { activeRef.current = isActive; }, [isActive]);
 
   // Clipboard: browser → remote
-  const isFirefox = useMemo(() => /firefox/i.test(navigator.userAgent), []);
+  const isFirefox = /firefox/i.test(navigator.userAgent);
   const syncClipboardToRemote = useCallback(() => {
     if (isFirefox) return;
     if (dlpPolicyRef.current?.disablePaste) return;
@@ -275,18 +272,15 @@ export default function VncViewer({ connectionId, tabId: _tabId, isActive = true
     suppressBrowserKeys: true,
   });
 
-  // Build toolbar actions list
-  const toolbarActions = useMemo<ToolbarAction[]>(() => {
-    const actions: ToolbarAction[] = [];
-    actions.push({
-      id: 'fullscreen',
-      icon: isFullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />,
-      tooltip: isFullscreen ? 'Exit Fullscreen' : 'Fullscreen',
-      onClick: toggleFullscreen,
-      active: isFullscreen,
-    });
-    return actions;
-  }, [isFullscreen, toggleFullscreen]);
+  // Build toolbar actions via shared hook
+  const toolbarActions = useGuacToolbarActions({
+    protocol: 'VNC',
+    clientRef,
+    tabId,
+    dlpPolicy,
+    isFullscreen,
+    toggleFullscreen,
+  });
 
   // Listen for admin-initiated session termination
   useEffect(() => {
@@ -414,7 +408,7 @@ export default function VncViewer({ connectionId, tabId: _tabId, isActive = true
         />
       )}
       {status === 'connected' && (
-        <FloatingToolbar actions={toolbarActions} containerRef={containerRef} />
+        <DockedToolbar actions={toolbarActions} containerRef={containerRef} />
       )}
       <Box
         ref={displayRef}
