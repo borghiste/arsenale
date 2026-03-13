@@ -200,6 +200,7 @@ def _parse_content_fields(block: dict, content_lines: list[str]) -> None:
     block["category"] = ""
     block["date"] = ""
     block["motivation"] = ""
+    block["release"] = ""
     block["completed"] = ""
     block["rejection_reason"] = ""
 
@@ -229,6 +230,9 @@ def _parse_content_fields(block: dict, content_lines: list[str]) -> None:
             continue
         if stripped.startswith("Dependencies:"):
             block["dependencies"] = stripped[len("Dependencies:"):].strip()
+            continue
+        if stripped.startswith("Release:"):
+            block["release"] = stripped[len("Release:"):].strip()
             continue
         if stripped.startswith("Category:"):
             block["category"] = stripped[len("Category:"):].strip()
@@ -884,6 +888,86 @@ def _find_insert_position(lines: list[str], sections: list[dict]) -> int:
     return len(lines)
 
 
+# ── Subcommand: set-release ─────────────────────────────────────────────────
+
+def cmd_set_release(args):
+    """Set or clear the Release: field on a task block."""
+    root = find_project_root()
+    code = args.code.upper()
+    version = args.version.strip() if args.version else ""
+
+    # Treat "None" or "none" as clearing the release
+    if version.lower() == "none":
+        version = ""
+
+    # Strip leading 'v' if present for consistency
+    if version.startswith("v") or version.startswith("V"):
+        version = version[1:]
+
+    # Find the block across all task files
+    source_file = None
+    block = None
+    for fname in TASK_FILES:
+        fp = root / fname
+        if not fp.exists():
+            continue
+        b = find_block(fp, code)
+        if b:
+            source_file = fname
+            block = b
+            break
+
+    if not block:
+        print(json.dumps({"error": f"Task {code} not found in any task file"}))
+        sys.exit(1)
+
+    fp = root / source_file
+    lines = read_lines(fp)
+
+    # Find the Dependencies: line within the block range
+    deps_idx = None
+    release_idx = None
+    for idx in range(block["line_start"], block["line_end"] + 1):
+        stripped = lines[idx].strip()
+        if stripped.startswith("Dependencies:"):
+            deps_idx = idx
+        if stripped.startswith("Release:"):
+            release_idx = idx
+
+    if version:
+        release_line = f"  Release: {version}"
+        if release_idx is not None:
+            # Update existing Release: line
+            lines[release_idx] = release_line
+        elif deps_idx is not None:
+            # Insert after Dependencies: line
+            lines.insert(deps_idx + 1, release_line)
+        else:
+            # Fallback: insert after the second separator line (header)
+            for idx in range(block["line_start"], min(block["line_start"] + 3, block["line_end"] + 1)):
+                if is_separator(lines[idx]):
+                    continue
+                # Insert after Priority line or first content line
+                if lines[idx].strip().startswith("Priority:"):
+                    lines.insert(idx + 1, release_line)
+                    break
+            else:
+                lines.insert(block["line_start"] + 2, release_line)
+    else:
+        # Remove the Release: line if it exists
+        if release_idx is not None:
+            lines.pop(release_idx)
+
+    write_lines(fp, lines)
+
+    print(json.dumps({
+        "success": True,
+        "code": code,
+        "file": source_file,
+        "release": version if version else None,
+    }))
+
+
 # ── Subcommand: remove ──────────────────────────────────────────────────────
 
 def cmd_remove(args):
@@ -1342,6 +1426,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--to", required=True, choices=["todo", "progressing", "done"])
     p.add_argument("--completed-summary", default=None, help="Summary for COMPLETED field (when moving to done)")
     p.set_defaults(func=cmd_move)
+
+    # set-release
+    p = sub.add_parser("set-release", help="Set or clear the Release: field on a task")
+    p.add_argument("code", help="Task code (e.g., AUTH-001)")
+    p.add_argument("--version", required=True, help="Release version (e.g., 1.4.0) or 'None' to clear")
+    p.set_defaults(func=cmd_set_release)
 
     # remove
     p = sub.add_parser("remove", help="Remove a block from a file")

@@ -116,6 +116,15 @@ Every time you are invoked, you must:
    ### Dual sync mode
    Write to `to-do.txt` first (same as local only mode), then sync each new task to platform issues with the labels `claude-code,task,priority:medium,status:todo,section:scouted`.
 
+6. **Offer release assignment** (optional): After creating scouted tasks, check if release plans exist:
+   ```bash
+   python3 .claude/scripts/release_manager.py release-plan-list
+   ```
+   If planned (non-released) releases exist, for each newly created task, briefly consider whether it fits an existing release theme. If a good match is found, mention it in the output report:
+   > "Suggested release assignment: [SCOUT-NNN] could fit into release v{VERSION} (theme: '{THEME}'). Use `/release-plan assign SCOUT-NNN v{VERSION}` to assign."
+
+   Do NOT auto-assign — scouted tasks are future-looking and the user should decide. If no release plan exists, skip this entirely.
+
 ## Research Categories to Explore
 
 Rotate through these categories across invocations to maintain diversity:

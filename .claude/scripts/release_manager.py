@@ -409,6 +409,216 @@ def cmd_generate_changelog(args):
     print("\n".join(lines).rstrip())
 
 
+# ── Release Plan Helpers ──────────────────────────────────────────────────
+
+RELEASES_FILENAME = "releases.json"
+
+
+def _releases_path() -> Path:
+    """Return path to releases.json at project root."""
+    return find_project_root() / RELEASES_FILENAME
+
+
+def _read_releases() -> dict:
+    """Read releases.json. Returns empty structure if missing."""
+    fp = _releases_path()
+    if not fp.exists():
+        return {"releases": []}
+    try:
+        with open(fp, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {"releases": []}
+
+
+def _write_releases(data: dict) -> None:
+    """Write releases.json atomically."""
+    fp = _releases_path()
+    with open(fp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+
+def _parse_semver(v: str) -> tuple[int, int, int, bool]:
+    """Parse a semver string into (major, minor, patch, is_beta)."""
+    is_beta = v.endswith("-beta")
+    clean = v.removesuffix("-beta").lstrip("vV")
+    m = VERSION_RE.match(clean)
+    if not m:
+        return (0, 0, 0, is_beta)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)), is_beta)
+
+
+def _semver_sort_key(release: dict) -> tuple:
+    """Sort key for releases by semantic version."""
+    major, minor, patch, is_beta = _parse_semver(release.get("version", "0.0.0"))
+    return (major, minor, patch, 0 if is_beta else 1)
+
+
+# ── Subcommand: release-plan-list ─────────────────────────────────────────
+
+def cmd_release_plan_list(args):
+    """List all planned releases with stats."""
+    data = _read_releases()
+    releases = sorted(data.get("releases", []), key=_semver_sort_key)
+
+    # Determine next release (lowest non-released)
+    next_release = None
+    for rel in releases:
+        if rel.get("status") != "released":
+            next_release = rel.get("version")
+            break
+
+    output = {
+        "releases": releases,
+        "next_release": next_release,
+        "total": len(releases),
+    }
+    print(json.dumps(output, indent=2))
+
+
+# ── Subcommand: release-plan-create ───────────────────────────────────────
+
+def cmd_release_plan_create(args):
+    """Create a new release plan entry."""
+    version = args.version.lstrip("vV")
+    theme = args.theme or ""
+    target_date = args.target_date or None
+
+    data = _read_releases()
+    releases = data.get("releases", [])
+
+    # Check for duplicate version
+    for rel in releases:
+        if rel.get("version") == version:
+            print(json.dumps({"error": f"Release {version} already exists"}))
+            sys.exit(1)
+
+    new_release = {
+        "version": version,
+        "status": "planned",
+        "target_date": target_date,
+        "theme": theme,
+        "tasks": [],
+        "created_at": date.today().isoformat(),
+        "released_at": None,
+    }
+    releases.append(new_release)
+    data["releases"] = releases
+    _write_releases(data)
+
+    print(json.dumps({"success": True, "release": new_release}, indent=2))
+
+
+# ── Subcommand: release-plan-add-task ─────────────────────────────────────
+
+def cmd_release_plan_add_task(args):
+    """Add a task to a release."""
+    version = args.version.lstrip("vV")
+    task_code = args.task.upper()
+
+    data = _read_releases()
+    releases = data.get("releases", [])
+
+    target = None
+    for rel in releases:
+        if rel.get("version") == version:
+            target = rel
+            break
+
+    if not target:
+        print(json.dumps({"error": f"Release {version} not found"}))
+        sys.exit(1)
+
+    tasks = target.get("tasks", [])
+    if task_code in tasks:
+        print(json.dumps({"error": f"Task {task_code} already in release {version}"}))
+        sys.exit(1)
+
+    tasks.append(task_code)
+    target["tasks"] = tasks
+    _write_releases(data)
+
+    print(json.dumps({"success": True, "version": version, "task": task_code}, indent=2))
+
+
+# ── Subcommand: release-plan-remove-task ──────────────────────────────────
+
+def cmd_release_plan_remove_task(args):
+    """Remove a task from a release."""
+    version = args.version.lstrip("vV")
+    task_code = args.task.upper()
+
+    data = _read_releases()
+    releases = data.get("releases", [])
+
+    target = None
+    for rel in releases:
+        if rel.get("version") == version:
+            target = rel
+            break
+
+    if not target:
+        print(json.dumps({"error": f"Release {version} not found"}))
+        sys.exit(1)
+
+    tasks = target.get("tasks", [])
+    if task_code not in tasks:
+        print(json.dumps({"error": f"Task {task_code} not found in release {version}"}))
+        sys.exit(1)
+
+    tasks.remove(task_code)
+    target["tasks"] = tasks
+    _write_releases(data)
+
+    print(json.dumps({"success": True, "version": version, "task": task_code}, indent=2))
+
+
+# ── Subcommand: release-plan-next ─────────────────────────────────────────
+
+def cmd_release_plan_next(args):
+    """Return the next planned (non-released) release."""
+    data = _read_releases()
+    releases = sorted(data.get("releases", []), key=_semver_sort_key)
+
+    next_release = None
+    for rel in releases:
+        if rel.get("status") != "released":
+            next_release = rel
+            break
+
+    if next_release:
+        print(json.dumps({"found": True, "release": next_release}, indent=2))
+    else:
+        print(json.dumps({"found": False, "release": None}, indent=2))
+
+
+# ── Subcommand: release-plan-mark-released ────────────────────────────────
+
+def cmd_release_plan_mark_released(args):
+    """Mark a release as released."""
+    version = args.version.lstrip("vV")
+
+    data = _read_releases()
+    releases = data.get("releases", [])
+
+    target = None
+    for rel in releases:
+        if rel.get("version") == version:
+            target = rel
+            break
+
+    if not target:
+        print(json.dumps({"error": f"Release {version} not found"}))
+        sys.exit(1)
+
+    target["status"] = "released"
+    target["released_at"] = date.today().isoformat()
+    _write_releases(data)
+
+    print(json.dumps({"success": True, "version": version, "released_at": target["released_at"]}, indent=2))
+
+
 # ── CLI Setup ───────────────────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
@@ -441,6 +651,38 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", required=True, help="Version string for the header")
     p.add_argument("--date", default=None, help="Release date (YYYY-MM-DD, default: today)")
     p.set_defaults(func=cmd_generate_changelog)
+
+    # release-plan-list
+    p = sub.add_parser("release-plan-list", help="List all planned releases")
+    p.set_defaults(func=cmd_release_plan_list)
+
+    # release-plan-create
+    p = sub.add_parser("release-plan-create", help="Create a new release plan entry")
+    p.add_argument("--version", required=True, help="Release version (e.g., 1.4.0)")
+    p.add_argument("--theme", default=None, help="Release theme description")
+    p.add_argument("--target-date", default=None, help="Target date (YYYY-MM-DD)")
+    p.set_defaults(func=cmd_release_plan_create)
+
+    # release-plan-add-task
+    p = sub.add_parser("release-plan-add-task", help="Add a task to a release")
+    p.add_argument("--version", required=True, help="Release version")
+    p.add_argument("--task", required=True, help="Task code (e.g., AUTH-001)")
+    p.set_defaults(func=cmd_release_plan_add_task)
+
+    # release-plan-remove-task
+    p = sub.add_parser("release-plan-remove-task", help="Remove a task from a release")
+    p.add_argument("--version", required=True, help="Release version")
+    p.add_argument("--task", required=True, help="Task code (e.g., AUTH-001)")
+    p.set_defaults(func=cmd_release_plan_remove_task)
+
+    # release-plan-next
+    p = sub.add_parser("release-plan-next", help="Return the next planned release")
+    p.set_defaults(func=cmd_release_plan_next)
+
+    # release-plan-mark-released
+    p = sub.add_parser("release-plan-mark-released", help="Mark a release as released")
+    p.add_argument("--version", required=True, help="Release version to mark")
+    p.set_defaults(func=cmd_release_plan_mark_released)
 
     return parser
 

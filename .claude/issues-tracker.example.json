@@ -28,6 +28,7 @@
       "G": "section:orchestration",
       "H": "section:scouted",
       "I": "section:sso"
-    }
+    },
+    "release_prefix": "release:"
   }
 }

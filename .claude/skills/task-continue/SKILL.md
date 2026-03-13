@@ -130,7 +130,8 @@ Present a clear English-language briefing:
    - What remains to be done
 4. **Next Steps**: Ordered list of concrete implementation actions for the remaining work
 5. **Files to Create/Modify**: Every file with what still needs to happen in each
-6. **Quality Gate Reminder**: `npm run verify` must pass before the task can be closed via `/task-pick`
+6. **Release Assignment**: Check `releases.json` via `python3 .claude/scripts/release_manager.py release-plan-list` — if the task code appears in any release's `tasks` array, display: "This task is planned for release **vX.Y.Z** (theme: 'THEME')." If not in any release, display: "This task is not assigned to any release." In platform-only mode, alternatively check for a `release:*` label on the issue.
+7. **Quality Gate Reminder**: `npm run verify` must pass before the task can be closed via `/task-pick`
 
 After presenting the briefing, ask the user:
 

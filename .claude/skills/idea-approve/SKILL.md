@@ -168,7 +168,7 @@ Title: `[PREFIX-NNN] Task Title`
 
 Body:
 ```
-**Code:** PREFIX-NNN | **Priority:** HIGH/MEDIUM/LOW | **Section:** SECTION_NAME | **Dependencies:** DEPS
+**Code:** PREFIX-NNN | **Priority:** HIGH/MEDIUM/LOW | **Section:** SECTION_NAME | **Dependencies:** DEPS | **Release:** None
 **Promoted from:** [IDEA-NNN] #IDEA_ISSUE_NUMBER
 
 ## Description
@@ -200,6 +200,7 @@ Include specific code snippets, function signatures, endpoint paths.
 ------------------------------------------------------------------------------
   Priority: [HIGH/MEDIUM/LOW]
   Dependencies: [TASK-CODE, TASK-CODE or None]
+  Release: [VERSION or None]
 
   DESCRIPTION:
   Expanded description based on the original idea's DESCRIPTION
@@ -386,6 +387,44 @@ This cleanly removes the idea block and handles whitespace cleanup automatically
 
 **If any `gh`/`glab` command fails:** Warn but do NOT fail — in dual sync mode the local operations are already complete. In platform-only mode, report the failure clearly since no local fallback exists.
 
+### Step 9.8: Offer Release Assignment
+
+After the task has been created, check if release plans exist and offer to assign the new task to one.
+
+1. Check for existing release plans:
+   ```bash
+   python3 .claude/scripts/release_manager.py release-plan-list
+   ```
+
+2. If the `releases` array is empty or `releases.json` does not exist, skip this step entirely.
+
+3. If planned (non-released) releases exist, analyze the new task's description and section against the release themes. Suggest the best-matching release.
+
+4. Use `AskUserQuestion` with options:
+   - **"Assign to v{SUGGESTED_VERSION} ({THEME})"** — assign the task to the suggested release
+   - **"Assign to a different release"** — list all planned releases for the user to choose
+   - **"Create a new release for this task"** — run the create flow, then assign
+   - **"Skip (no release assignment)"** — leave the task unassigned
+
+   STOP HERE after calling `AskUserQuestion`. Do NOT proceed until the user responds.
+
+5. If the user chooses to assign:
+   ```bash
+   python3 .claude/scripts/release_manager.py release-plan-add-task --version "$VERSION" --task "$TASK_CODE"
+   ```
+
+   **In local/dual mode:**
+   ```bash
+   python3 .claude/scripts/task_manager.py set-release $TASK_CODE --version $VERSION
+   ```
+
+   **In platform-only or dual sync mode — add release label:**
+   ```bash
+   RELEASE_PREFIX=$(jq -r '.labels.release_prefix // "release:"' "$TRACKER_CFG")
+   gh issue edit "$TASK_ISSUE_NUM" --repo "$TRACKER_REPO" --add-label "${RELEASE_PREFIX}v${VERSION}"
+   # GitLab: glab issue update "$TASK_ISSUE_NUM" -R "$TRACKER_REPO" --label "${RELEASE_PREFIX}v${VERSION}"
+   ```
+
 ### Step 10: Confirm and Report
 
 After successfully completing all operations, report:
@@ -396,6 +435,7 @@ After successfully completing all operations, report:
 > - **Priority:** HIGH/MEDIUM/LOW
 > - **Dependencies:** list or None
 > - **Section:** SECTION X — Section Name
+> - **Release:** VERSION or 'not assigned'
 > - **Files to create:** N
 > - **Files to modify:** N
 >

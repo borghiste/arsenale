@@ -168,6 +168,27 @@ Ideas are stored separately:
 
 Use `/idea-create` to add ideas, `/idea-approve` to promote an idea to a task, `/idea-refactor` to update ideas based on codebase changes, and `/idea-disapprove` to reject an idea. Ideas must never be picked up directly by `/task-pick`.
 
+### Release Planning
+
+Tasks can be grouped into planned releases via `releases.json` at the project root. This is the single source of truth for release plans — platform labels (`release:vX.Y.Z`) and milestones are kept in sync as secondary artifacts.
+
+**`releases.json` structure:** An array of release entries, each with `version` (semver, no `v` prefix), `status` (`planned`|`in-progress`|`released`), `theme` (grouping description), `target_date` (optional), `tasks` (array of task codes), and `created_at`/`released_at` timestamps.
+
+**Key skills:**
+- `/release-plan` — Manage release plans: list, create, assign/unassign tasks, suggest groupings, view timeline
+- `/release-plan suggest` — AI-driven grouping of unassigned tasks by prefix affinity, dependency chains, section cohesion, and description similarity
+
+**Integration with existing skills:**
+- `/task-create` and `/idea-approve` — Offer to assign newly created tasks to a planned release
+- `/task-pick` and `/task-continue` — Show release assignment in briefing
+- `/task-status` — Includes release plan overview section
+- `/release` — Uses planned version from `releases.json` instead of auto-detecting from commits; marks release as released after publishing
+- `/git-publish` — Advisory warning if next planned release has incomplete tasks
+
+**Task block `Release:` field:** In local/dual mode, tasks have a `Release:` field after `Dependencies:`. In platform-only mode, the `release:vX.Y.Z` label on the issue serves the same purpose.
+
+**Backward compatibility:** All release planning features are optional. If `releases.json` does not exist, all skills behave identically to their pre-release-planning behavior.
+
 ### File Naming Conventions
 
 | Layer | Pattern | Example |
@@ -187,7 +208,7 @@ Use `/idea-create` to add ideas, `/idea-approve` to promote an idea to a task, `
 **Skill scripts:** Python utilities in `.claude/scripts/` (zero external dependencies, stdlib only):
 - `task_manager.py` — Task/idea parsing, ID generation, platform detection, PostToolUse hook
 - `app_manager.py` — Cross-platform port checking, process management
-- `release_manager.py` — Version detection, commit parsing, changelog generation
+- `release_manager.py` — Version detection, commit parsing, changelog generation, release plan management
 - `setup_labels.py` — Cross-platform label creation (GitHub/GitLab)
 
 **Config parameters:**

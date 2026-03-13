@@ -148,7 +148,7 @@ Platform issue format:
 - **Body:**
 
 ```markdown
-**Code:** PREFIX-NNN | **Priority:** PRIORITY | **Section:** SECTION_NAME | **Dependencies:** DEPS
+**Code:** PREFIX-NNN | **Priority:** PRIORITY | **Section:** SECTION_NAME | **Dependencies:** DEPS | **Release:** None
 
 ## Description
 Multi-line description in English. Explain WHAT the task does, WHY it is
@@ -184,6 +184,7 @@ Template:
 ------------------------------------------------------------------------------
   Priority: [HIGH/MEDIUM/LOW]
   Dependencies: [TASK-CODE, TASK-CODE or None]
+  Release: [VERSION or None]
 
   DESCRIPTION:
   Multi-line description. Explain WHAT the task does, WHY it is
@@ -344,6 +345,46 @@ Use the `Edit` tool to insert the task block at the correct position.
 
 **In local only mode:** Skip this step entirely.
 
+### Step 8.8: Offer Release Assignment
+
+After the task has been created, check if release plans exist and offer to assign the task to one.
+
+1. Check for existing release plans:
+   ```bash
+   python3 .claude/scripts/release_manager.py release-plan-list
+   ```
+
+2. If the `releases` array is empty or `releases.json` does not exist, skip this step entirely.
+
+3. If planned (non-released) releases exist, analyze the new task's description and section against the release themes. Suggest the best-matching release.
+
+4. Use `AskUserQuestion` with options:
+   - **"Assign to v{SUGGESTED_VERSION} ({THEME})"** — assign the task to the suggested release
+   - **"Assign to a different release"** — list all planned releases for the user to choose
+   - **"Create a new release for this task"** — run the create flow, then assign
+   - **"Skip (no release assignment)"** — leave the task unassigned
+
+   STOP HERE after calling `AskUserQuestion`. Do NOT proceed until the user responds.
+
+5. If the user chooses to assign:
+   ```bash
+   python3 .claude/scripts/release_manager.py release-plan-add-task --version "$VERSION" --task "$TASK_CODE"
+   ```
+
+   **In local/dual mode:**
+   ```bash
+   python3 .claude/scripts/task_manager.py set-release $TASK_CODE --version $VERSION
+   ```
+
+   **In platform-only or dual sync mode — add release label:**
+   ```bash
+   RELEASE_PREFIX=$(jq -r '.labels.release_prefix // "release:"' "$TRACKER_CFG")
+   gh issue edit "$ISSUE_NUM" --repo "$TRACKER_REPO" --add-label "${RELEASE_PREFIX}v${VERSION}"
+   # GitLab: glab issue update "$ISSUE_NUM" -R "$TRACKER_REPO" --label "${RELEASE_PREFIX}v${VERSION}"
+   ```
+
+6. Update the task's `Release:` field in the platform issue body (if applicable) using `gh issue edit` to reflect the version in the metadata line.
+
 ### Step 9: Confirm and Report
 
 After successfully creating the task, report:
@@ -356,6 +397,7 @@ After successfully creating the task, report:
 > - **Priority:** HIGH/MEDIUM/LOW
 > - **Dependencies:** list or None
 > - **Section:** SECTION_NAME
+> - **Release:** VERSION or 'not assigned'
 > - **Files to create:** N
 > - **Files to modify:** N
 > - **GitHub Issue:** #NNN (URL)"
@@ -368,6 +410,7 @@ After successfully creating the task, report:
 > - **Priority:** HIGH/MEDIUM/LOW
 > - **Dependencies:** list or None
 > - **Section:** SECTION X — Section Name
+> - **Release:** VERSION or 'not assigned'
 > - **Files to create:** N
 > - **Files to modify:** N
 > - **GitHub Issue:** #NNN (URL) *(only if GitHub sync succeeded)*"
@@ -380,6 +423,7 @@ After successfully creating the task, report:
 > - **Priority:** HIGH/MEDIUM/LOW
 > - **Dependencies:** list or None
 > - **Section:** SECTION X — Section Name
+> - **Release:** VERSION or 'not assigned'
 > - **Files to create:** N
 > - **Files to modify:** N"
 

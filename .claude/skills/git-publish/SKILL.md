@@ -55,6 +55,33 @@ STOP HERE after calling `AskUserQuestion`. Do NOT proceed until the user respond
 
 **If `TRACKER_ENABLED` is `false` or config missing:** Skip this check.
 
+### Step 0.5: Check release plan completeness (advisory)
+
+Check if a release plan exists for the next version:
+```bash
+python3 .claude/scripts/release_manager.py release-plan-next
+```
+
+If `found` is `true`, check the status of all planned tasks. For each task code in the release's `tasks` array, check if it is in `status:done`:
+
+**In platform-only or dual sync mode:**
+```bash
+gh issue list --repo "$TRACKER_REPO" --search "[TASK-CODE] in:title" --label "task" --json labels,state --jq '.[0]'
+# GitLab: glab issue list -R "$TRACKER_REPO" --search "[TASK-CODE]" -l task --output json | jq '.[0]'
+```
+
+If any tasks are incomplete (not `status:done`), warn the user:
+
+> "**Advisory:** The planned release **v{VERSION}** (theme: '{THEME}') has {N} tasks still incomplete:
+> - [TASK-CODE] — status: {STATUS}
+> - ...
+>
+> Publishing now may result in a partial release."
+
+This is advisory only — proceed to Step 1 regardless of the user's response. Do NOT block publishing.
+
+If `found` is `false` or `releases.json` does not exist, skip this check silently.
+
 ### Step 1: Commit if needed
 
 Check for uncommitted changes:

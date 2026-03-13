@@ -168,7 +168,8 @@ Present a clear English-language briefing:
 6. **Dependencies**: Status of all dependencies
 7. **Risks**: Any concerns found during exploration
 8. **Prisma Migration**: Note if schema changes are involved — migrations run automatically on server start via `prisma migrate deploy`
-9. **Quality Gate**: Remind that `npm run verify` must pass before the task can be closed
+9. **Release Assignment**: Check `releases.json` via `python3 .claude/scripts/release_manager.py release-plan-list` — if the task code appears in any release's `tasks` array, display: "This task is planned for release **vX.Y.Z** (theme: 'THEME')." If not in any release, display: "This task is not assigned to any release." In platform-only mode, alternatively check for a `release:*` label on the issue.
+10. **Quality Gate**: Remind that `npm run verify` must pass before the task can be closed
 
 After presenting the briefing, ask the user: "Ready to start implementation, or would you like to adjust the approach?"
 

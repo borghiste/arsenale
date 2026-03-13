@@ -133,4 +133,19 @@ Present the information above as a structured English-language report with these
 
 4. **Blocked Tasks** — If any, list them with the blocking reason.
 
+5. **Release Plan Overview** — Check if a release plan exists:
+   ```bash
+   python3 .claude/scripts/release_manager.py release-plan-list
+   ```
+   If `releases.json` does not exist or the `releases` array is empty, skip this section entirely.
+
+   If releases exist, present:
+   - **Next release**: version, theme, target date, and per-task status breakdown (how many todo/in-progress/to-test/done)
+   - **Upcoming releases**: summary table with version, theme, task count, progress %
+   - **Unassigned tasks**: count of open tasks not in any release (compare all open task codes against all release `tasks` arrays)
+
+   To check task statuses within a release:
+   - **Platform-only mode:** For each task code in the release, check its status label via `gh issue list --repo "$TRACKER_REPO" --search "[TASK-CODE] in:title" --label task --json labels,state`
+   - **Local/dual mode:** Use `python3 .claude/scripts/task_manager.py parse TASK-CODE` and check which file the task is in
+
 Do NOT modify any files. This is a read-only status report.
