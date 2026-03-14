@@ -36,6 +36,7 @@ model Tenant {
   dlpDisablePaste              Boolean  @default(false)
   dlpDisableDownload           Boolean  @default(false)
   dlpDisableUpload             Boolean  @default(false)
+  enforcedConnectionSettings   Json?
   createdAt                    DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -597,6 +598,7 @@ enum AuditAction {
   TENANT_MEMBERSHIP_EXPIRY_UPDATE
   TEAM_MEMBERSHIP_EXPIRY_UPDATE
   TENANT_DLP_POLICY_UPDATE
+  TENANT_CONNECTION_POLICY_UPDATE
   TOKEN_HIJACK_ATTEMPT
 }
 

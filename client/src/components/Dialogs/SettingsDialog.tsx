@@ -34,6 +34,7 @@ import SelfSignupSection from '../Settings/SelfSignupSection';
 import TenantAuditLogSection from '../Settings/TenantAuditLogSection';
 import LdapConfigSection from '../Settings/LdapConfigSection';
 import SyncProfileSection from '../Settings/SyncProfileSection';
+import TenantConnectionPolicySection from '../Settings/TenantConnectionPolicySection';
 import { SlideUp } from '../common/SlideUp';
 import { isAdminOrAbove } from '../../utils/roles';
 
@@ -196,7 +197,10 @@ export default function SettingsDialog({ open, onClose, initialTab, linkedProvid
             </Stack>
           )}
           {resolvedTab === 'organization' && (
-            <TenantSection onNavigateToTab={setActiveTab} onViewUserProfile={onViewUserProfile} />
+            <Stack spacing={3}>
+              <TenantSection onNavigateToTab={setActiveTab} onViewUserProfile={onViewUserProfile} />
+              {isAdmin && <TenantConnectionPolicySection />}
+            </Stack>
           )}
           {resolvedTab === 'teams' && (
             <TeamSection onNavigateToTab={setActiveTab} />
