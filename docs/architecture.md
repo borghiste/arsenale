@@ -1,6 +1,6 @@
 # Architecture
 
-> Auto-generated on 2026-03-11 by `/docs create architecture`.
+> Auto-generated on 2026-03-14 by `/docs create architecture`.
 > Source of truth is the codebase. Run `/docs update architecture` after code changes.
 
 ## System Overview
@@ -99,7 +99,7 @@ All Socket.IO namespaces authenticate via JWT middleware using the `auth.token` 
 
 - **React 19** with TypeScript
 - **Vite** — dev server (port 3000) with proxy to backend
-- **Material-UI (MUI) v6** — component library
+- **Material-UI (MUI) v7** — component library
 - **Zustand** — state management (14 stores)
 - **Axios** — HTTP client with automatic JWT refresh
 - **Socket.IO Client** — real-time SSH terminals, notifications, gateway monitoring

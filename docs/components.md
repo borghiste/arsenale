@@ -1,6 +1,6 @@
 # Components
 
-> Auto-generated on 2026-03-11 by `/docs create components`.
+> Auto-generated on 2026-03-14 by `/docs create components`.
 > Source of truth is the codebase. Run `/docs update components` after code changes.
 
 ## Overview
@@ -9,7 +9,7 @@ The client is built with:
 
 - **React 19** with TypeScript
 - **Vite** — build tool and dev server
-- **Material-UI (MUI) v6** — component library and theming
+- **Material-UI (MUI) v7** — component library and theming
 - **Zustand** — state management (14 stores with localStorage persistence for UI preferences)
 - **Axios** — HTTP client with JWT auto-refresh
 - **Socket.IO Client** — real-time SSH terminals, notifications, gateway monitoring
