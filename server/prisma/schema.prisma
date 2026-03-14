@@ -32,6 +32,8 @@ model Tenant {
   mfaRequired                  Boolean  @default(false)
   vaultAutoLockMaxMinutes      Int?
   defaultSessionTimeoutSeconds Int      @default(3600)
+  maxConcurrentSessions        Int      @default(0)
+  absoluteSessionTimeoutSeconds Int     @default(43200)
   dlpDisableCopy               Boolean  @default(false)
   dlpDisablePaste              Boolean  @default(false)
   dlpDisableDownload           Boolean  @default(false)
@@ -460,8 +462,9 @@ model RefreshToken {
   id          String    @id @default(uuid())
   token       String    @unique
   userId      String
-  tokenFamily String
-  ipUaHash    String?
+  tokenFamily     String
+  familyCreatedAt DateTime  @default(now())
+  ipUaHash        String?
   revokedAt   DateTime?
   expiresAt   DateTime
   createdAt   DateTime  @default(now())
@@ -470,6 +473,7 @@ model RefreshToken {
 
   @@index([tokenFamily])
   @@index([userId])
+  @@index([userId, familyCreatedAt])
 }
 
 enum AuditAction {
@@ -607,6 +611,8 @@ enum AuditAction {
   TENANT_DLP_POLICY_UPDATE
   TENANT_CONNECTION_POLICY_UPDATE
   TOKEN_HIJACK_ATTEMPT
+  SESSION_LIMIT_EXCEEDED
+  SESSION_ABSOLUTE_TIMEOUT
   VAULT_PROVIDER_CREATE
   VAULT_PROVIDER_UPDATE
   VAULT_PROVIDER_DELETE

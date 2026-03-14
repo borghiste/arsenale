@@ -109,6 +109,8 @@ export async function getTenant(tenantId: string) {
     slug: tenant.slug,
     mfaRequired: tenant.mfaRequired,
     defaultSessionTimeoutSeconds: tenant.defaultSessionTimeoutSeconds,
+    maxConcurrentSessions: tenant.maxConcurrentSessions,
+    absoluteSessionTimeoutSeconds: tenant.absoluteSessionTimeoutSeconds,
     vaultAutoLockMaxMinutes: tenant.vaultAutoLockMaxMinutes,
     dlpDisableCopy: tenant.dlpDisableCopy,
     dlpDisablePaste: tenant.dlpDisablePaste,
@@ -125,6 +127,8 @@ export async function getTenant(tenantId: string) {
 export async function updateTenant(tenantId: string, data: {
   name?: string;
   defaultSessionTimeoutSeconds?: number;
+  maxConcurrentSessions?: number;
+  absoluteSessionTimeoutSeconds?: number;
   mfaRequired?: boolean;
   vaultAutoLockMaxMinutes?: number | null;
   dlpDisableCopy?: boolean;
@@ -141,6 +145,12 @@ export async function updateTenant(tenantId: string, data: {
   }
   if (data.defaultSessionTimeoutSeconds !== undefined) {
     updateData.defaultSessionTimeoutSeconds = data.defaultSessionTimeoutSeconds;
+  }
+  if (data.maxConcurrentSessions !== undefined) {
+    updateData.maxConcurrentSessions = data.maxConcurrentSessions;
+  }
+  if (data.absoluteSessionTimeoutSeconds !== undefined) {
+    updateData.absoluteSessionTimeoutSeconds = data.absoluteSessionTimeoutSeconds;
   }
   if (data.mfaRequired !== undefined) {
     updateData.mfaRequired = data.mfaRequired;
@@ -181,6 +191,8 @@ export async function updateTenant(tenantId: string, data: {
     slug: tenant.slug,
     mfaRequired: tenant.mfaRequired,
     defaultSessionTimeoutSeconds: tenant.defaultSessionTimeoutSeconds,
+    maxConcurrentSessions: tenant.maxConcurrentSessions,
+    absoluteSessionTimeoutSeconds: tenant.absoluteSessionTimeoutSeconds,
     vaultAutoLockMaxMinutes: tenant.vaultAutoLockMaxMinutes,
     dlpDisableCopy: tenant.dlpDisableCopy,
     dlpDisablePaste: tenant.dlpDisablePaste,
