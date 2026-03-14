@@ -497,6 +497,8 @@ export async function listConnections(userId: string, tenantId?: string | null) 
         gatewayId: true,
         credentialSecretId: true,
         credentialSecret: { select: { name: true, type: true } },
+        externalVaultProviderId: true,
+        externalVaultPath: true,
         description: true,
         isFavorite: true,
         enableDrive: true,
@@ -618,9 +620,13 @@ export async function getConnectionCredentials(
 
   // External vault provider: resolve credentials from HashiCorp Vault
   if (connection.externalVaultProviderId && connection.externalVaultPath) {
+    if (!tenantId) {
+      throw new AppError('Tenant context is required for external vault credential resolution', 400);
+    }
     return resolveExternalVaultCredentials(
       connection.externalVaultProviderId,
       connection.externalVaultPath,
+      tenantId,
     );
   }
 

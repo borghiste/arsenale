@@ -1,9 +1,12 @@
+import { Agent } from 'undici';
 import prisma from '../lib/prisma';
 import { encryptWithServerKey, decryptWithServerKey } from './crypto.service';
 import { AppError } from '../middleware/error.middleware';
 import * as auditService from './audit.service';
 import { logger } from '../utils/logger';
 import type { ResolvedCredentials } from '../types';
+
+const VAULT_REQUEST_TIMEOUT_MS = 10_000;
 
 const log = logger.child('external-vault');
 
@@ -79,11 +82,35 @@ async function hcvFetch(
   if (options.token) headers['X-Vault-Token'] = options.token;
   if (options.namespace) headers['X-Vault-Namespace'] = options.namespace;
 
-  const resp = await fetch(url, {
+  // Build fetch options with timeout and optional custom CA certificate
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), VAULT_REQUEST_TIMEOUT_MS);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fetchOptions: Record<string, any> = {
     method: options.method ?? 'GET',
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+    signal: controller.signal,
+  };
+
+  if (options.caCertificate) {
+    fetchOptions.dispatcher = new Agent({
+      connect: { ca: options.caCertificate },
+    });
+  }
+
+  let resp: Response;
+  try {
+    resp = await fetch(url, fetchOptions);
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new AppError(`HashiCorp Vault request timed out after ${VAULT_REQUEST_TIMEOUT_MS}ms`, 504);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
@@ -114,7 +141,16 @@ async function resolveClientToken(provider: {
     iv: provider.authPayloadIV,
     tag: provider.authPayloadTag,
   });
-  const payload = JSON.parse(payloadJson);
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(payloadJson) as Record<string, unknown>;
+  } catch {
+    throw new AppError(
+      'Failed to parse vault provider auth payload — stored credentials may be corrupted',
+      500,
+    );
+  }
 
   if (provider.authMethod === 'TOKEN') {
     return payload.token as string;
@@ -433,9 +469,10 @@ export async function testConnection(
 export async function resolveExternalVaultCredentials(
   providerId: string,
   secretPath: string,
+  tenantId: string,
 ): Promise<ResolvedCredentials> {
   const provider = await prisma.externalVaultProvider.findFirst({
-    where: { id: providerId },
+    where: { id: providerId, tenantId },
   });
   if (!provider) {
     throw new AppError('External vault provider not found or has been deleted', 404);

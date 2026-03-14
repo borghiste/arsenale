@@ -25,6 +25,9 @@ export const createConnectionSchema = z.object({
 }).refine(
   (data) => data.credentialSecretId || data.externalVaultProviderId || (data.username !== undefined && data.password !== undefined),
   { message: 'Either credentialSecretId, externalVaultProviderId, or both username and password must be provided' }
+).refine(
+  (data) => !data.externalVaultProviderId || (data.externalVaultPath && data.externalVaultPath.trim().length > 0),
+  { message: 'externalVaultPath is required when externalVaultProviderId is set', path: ['externalVaultPath'] }
 );
 
 export type CreateConnectionInput = z.infer<typeof createConnectionSchema>;
@@ -49,6 +52,9 @@ export const updateConnectionSchema = z.object({
   vncSettings: vncSettingsSchema.nullable().optional(),
   dlpPolicy: dlpPolicySchema.nullable().optional(),
   defaultCredentialMode: z.enum(['saved', 'domain', 'prompt']).nullable().optional(),
-});
+}).refine(
+  (data) => !data.externalVaultProviderId || (data.externalVaultPath && data.externalVaultPath.trim().length > 0),
+  { message: 'externalVaultPath is required when externalVaultProviderId is set', path: ['externalVaultPath'] }
+);
 
 export type UpdateConnectionInput = z.infer<typeof updateConnectionSchema>;

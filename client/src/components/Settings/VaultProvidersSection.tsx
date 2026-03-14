@@ -263,7 +263,16 @@ export default function VaultProvidersSection({ tenantId }: VaultProvidersSectio
             <TextField label="Server URL" value={formUrl} onChange={(e) => setFormUrl(e.target.value)} fullWidth required placeholder="https://vault.example.com:8200" />
             <FormControl fullWidth>
               <InputLabel>Auth Method</InputLabel>
-              <Select value={formAuth} label="Auth Method" onChange={(e) => setFormAuth(e.target.value as 'TOKEN' | 'APPROLE')}>
+              <Select value={formAuth} label="Auth Method" onChange={(e) => {
+                const newMethod = e.target.value as 'TOKEN' | 'APPROLE';
+                setFormAuth(newMethod);
+                if (editingProvider) {
+                  // Clear credential fields when switching auth method in edit mode
+                  setFormToken('');
+                  setFormRoleId('');
+                  setFormSecretId('');
+                }
+              }}>
                 <MenuItem value="TOKEN">Static Token</MenuItem>
                 <MenuItem value="APPROLE">AppRole</MenuItem>
               </Select>
