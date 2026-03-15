@@ -14,6 +14,7 @@ import { getClientIp } from '../utils/ip';
 import { enforceIpAllowlist } from '../utils/ipAllowlist';
 import { getRequestBinding } from '../utils/tokenBinding';
 import { generateAuthCode, consumeAuthCode } from '../utils/authCodeStore';
+import { generateLinkCode, consumeLinkCode } from '../utils/linkCodeStore';
 import type { VaultSetupInput } from '../schemas/oauth.schemas';
 
 type OAuthProvider = 'google' | 'microsoft' | 'github' | 'oidc';
@@ -146,17 +147,27 @@ export function getAvailableProviders(_req: Request, res: Response) {
 }
 
 export function initiateLinkOAuth(req: Request, res: Response, next: NextFunction) {
-  // Accept token from Authorization header first, fall back to query param for backward compat
-  const authHeader = req.headers.authorization;
-  const token = (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined)
-    || req.query.token as string;
-  if (!token) return next(new AppError('Missing token', 401));
+  // Accept a one-time link code (preferred) to avoid JWTs in URL params.
+  // Falls back to Authorization header, then query param token for backward compat.
+  let userId: string | undefined;
 
-  let payload: AuthPayload;
-  try {
-    payload = verifyJwt<AuthPayload>(token);
-  } catch {
-    return next(new AppError('Invalid token', 401));
+  const linkCode = req.query.code as string | undefined;
+  if (linkCode) {
+    const resolved = consumeLinkCode(linkCode);
+    if (!resolved) return next(new AppError('Invalid or expired link code', 401));
+    userId = resolved;
+  } else {
+    const authHeader = req.headers.authorization;
+    const token = (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined)
+      || req.query.token as string;
+    if (!token) return next(new AppError('Missing authentication', 401));
+
+    try {
+      const payload = verifyJwt<AuthPayload>(token);
+      userId = payload.userId;
+    } catch {
+      return next(new AppError('Invalid token', 401));
+    }
   }
 
   const provider = req.params.provider as string;
@@ -166,7 +177,7 @@ export function initiateLinkOAuth(req: Request, res: Response, next: NextFunctio
 
   const state = Buffer.from(JSON.stringify({
     action: 'link',
-    userId: payload.userId,
+    userId,
   })).toString('base64url');
 
   passport.authenticate(provider, {
@@ -174,6 +185,17 @@ export function initiateLinkOAuth(req: Request, res: Response, next: NextFunctio
     session: false,
     state,
   })(req, res, next);
+}
+
+/**
+ * Generate a short-lived one-time code for account linking.
+ * The client calls this via Axios (with Authorization header),
+ * then redirects to the link endpoint with ?code=... instead of ?token=...
+ */
+export function generateLinkCodeEndpoint(req: AuthRequest, res: Response) {
+  assertAuthenticated(req);
+  const code = generateLinkCode(req.user.userId);
+  res.json({ code });
 }
 
 export function exchangeCode(req: Request, res: Response, next: NextFunction) {

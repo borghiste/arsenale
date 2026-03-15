@@ -11,7 +11,10 @@ const router = Router();
 // Public: list available OAuth providers
 router.get('/oauth/providers', oauthFlowRateLimiter, oauthController.getAvailableProviders);
 
-// Account linking initiation (uses JWT from Authorization header or query param)
+// Generate a short-lived link code (authenticated, avoids JWT in URL)
+router.post('/oauth/link-code', authenticate, oauthLinkRateLimiter, oauthController.generateLinkCodeEndpoint);
+
+// Account linking initiation (uses one-time link code, Authorization header, or query param token)
 router.get('/oauth/link/:provider', oauthLinkRateLimiter, oauthController.initiateLinkOAuth);
 
 // Exchange a one-time authorization code for token data (public, replaces tokens in URL)
