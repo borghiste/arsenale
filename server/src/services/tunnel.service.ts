@@ -415,7 +415,9 @@ function handleClose(conn: TunnelConnection, streamId: number): void {
 }
 
 function handlePing(conn: TunnelConnection, streamId: number): void {
-  conn.lastPingSentAt = Date.now();
+  // Respond with PONG and update heartbeat — do NOT set lastPingSentAt here
+  // (lastPingSentAt should only be set when the server sends a PING)
+  conn.lastHeartbeat = new Date();
   const frame = buildFrame(MsgType.PONG, streamId);
   conn.ws.send(frame, (err) => {
     if (err) log.warn(`[tunnel] ${conn.gatewayId}: failed to send PONG: ${err.message}`);
@@ -443,9 +445,18 @@ function handlePong(conn: TunnelConnection): void {
   }).catch(() => { /* best-effort */ });
 }
 
+const MAX_HEARTBEAT_PAYLOAD_BYTES = 4096; // 4 KB
+
 function handleHeartbeat(conn: TunnelConnection, payload: Buffer): void {
   const now = new Date();
   conn.lastHeartbeat = now;
+
+  // Reject oversized payloads to prevent abuse
+  if (payload.length > MAX_HEARTBEAT_PAYLOAD_BYTES) {
+    log.warn(`[tunnel] ${conn.gatewayId}: heartbeat payload too large (${payload.length} bytes) — ignored`);
+    conn.heartbeatMetadata = { healthy: true };
+    return;
+  }
 
   // Parse optional JSON metadata from the heartbeat payload
   if (payload.length > 0) {
@@ -762,20 +773,24 @@ export async function processCertRotations(): Promise<void> {
 
       // Generate a new client certificate valid for 90 days
       const validityDays = 90;
-      const { cert: newClientCert, expiry } = generateClientCert(gw.tunnelCaCert, caKeyPem, validityDays);
+      let newClientCert: string;
+      let expiry: Date;
+      try {
+        const result = generateClientCert(gw.tunnelCaCert, caKeyPem, validityDays);
+        newClientCert = result.cert;
+        expiry = result.expiry;
+      } catch (genErr) {
+        log.warn(`[tunnel] cert-rotation: skipping gateway ${gw.id} — ${(genErr as Error).message}`);
+        continue;
+      }
 
-      // Encrypt and persist the new certificate
-      const encCaKey = encryptWithServerKey(caKeyPem);
-
+      // Persist only the new client cert and expiry — no need to re-encrypt
+      // the CA key on every rotation cycle
       await prisma.gateway.update({
         where: { id: gw.id },
         data: {
           tunnelClientCert: newClientCert,
           tunnelClientCertExp: expiry,
-          // Re-persist CA key with fresh encryption (nonce rotation)
-          tunnelCaKey: encCaKey.ciphertext,
-          tunnelCaKeyIV: encCaKey.iv,
-          tunnelCaKeyTag: encCaKey.tag,
         },
       });
 
@@ -810,51 +825,20 @@ export async function processCertRotations(): Promise<void> {
 }
 
 /**
- * Generate a self-signed client certificate using Node's built-in crypto.
- * Returns PEM-encoded cert and its expiry date.
+ * Generate a CA-signed X.509 client certificate.
  *
- * Note: Node's crypto.X509Certificate / generateCertificate is available
- * from Node 19+. For broader compatibility we produce a minimal self-signed
- * cert using the CA key directly via the X.509 DER builder embedded here.
- * In practice, operators with managed PKI should replace this with their own
- * CA-signing flow.  This implementation generates a fresh RSA key + cert
- * signed by the gateway CA using Node's `crypto.generateKeyPairSync` and
- * `X509Certificate` helpers (Node ≥ 19 / 18 LTS with --experimental-vm-modules).
- *
- * For environments where the built-in X.509 generator is not available,
- * we fall back to a self-signed cert with the same key material.
+ * TODO: This function is a stub. The previous implementation only generated an
+ * RSA public key PEM, NOT a valid X.509 certificate, and the CA parameters
+ * were unused. Proper implementation requires an X.509 signing library such as
+ * `node-forge` or `@peculiar/x509`. Until that dependency is added, this
+ * function throws to prevent silently distributing invalid certificates.
  */
 function generateClientCert(
   _caCertPem: string,
   _caKeyPem: string,
-  validityDays: number,
+  _validityDays: number,
 ): { cert: string; expiry: Date } {
-  const expiry = new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000);
-
-  // Generate a new RSA key pair for the client cert
-  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
-
-  // Build a minimal self-signed certificate using Node's X509Certificate API
-  // (available in Node 18+ with the crypto module)
-  let certPem: string;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const x509Module = crypto as any;
-    if (typeof x509Module.X509Certificate === 'function') {
-      // Node 19+ supports X509Certificate.generate (experimental)
-      // For now we produce a PKCS#10-style self-signed stub
-      certPem = publicKey.export({ type: 'pkcs1', format: 'pem' }) as string;
-    } else {
-      certPem = publicKey.export({ type: 'pkcs1', format: 'pem' }) as string;
-    }
-  } catch {
-    certPem = publicKey.export({ type: 'pkcs1', format: 'pem' }) as string;
-  }
-
-  // Suppress unused variable lint — privateKey would be used in full PKI integration
-  void privateKey;
-
-  return { cert: certPem, expiry };
+  throw new Error('Client certificate generation not yet implemented — requires X.509 signing library');
 }
 
 let certRotationTimer: ReturnType<typeof setInterval> | null = null;
