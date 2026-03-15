@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-03-15
+
+### Changed
+- Prevent duplicate Guacamole connections and reconnect loops on RDP/VNC session open
+- Fix LOG_GUACAMOLE=false having no effect due to guacamole-lite log level bug
+
+### Security
+- Upgrade nginx to 1.28 and hide server version (SEC-0002)
+- Harden external share endpoint — stricter rate limits and eliminate enumeration oracle (SEC-0003)
+- Enforce authentication on Socket.IO base namespace (SEC-0004)
+- Add security headers (CSP, HSTS, X-Frame-Options, Permissions-Policy) to nginx (SEC-0005)
+- Remove access tokens from URL parameters in OAuth/SAML flows (SEC-0006)
+- Restrict auth config and OAuth provider endpoints to reduce info disclosure (SEC-0007)
+- Restrict user search to team-scoped results by default (SEC-0008)
+- Add custom Express 404 handler to prevent framework disclosure (SEC-0009)
+- Extend CSRF token validation to all state-changing endpoints (SEC-0010)
+- Enforce tenant boundary on connection sharing recipients (SEC-0011)
+- Only set CORS allow-credentials when whitelisted origin matches (SEC-0012)
+- Add Cache-Control headers and suppress Last-Modified on static assets (SEC-0013)
+- Add Permissions-Policy header via Helmet.js middleware (SEC-0014)
+
 ## [1.4.0] - 2026-03-15
 
 ### Added
@@ -192,7 +213,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Email verification preventing unverified account login
 - ESLint security plugin enforced in CI
 
-[Unreleased]: https://github.com/dnviti/arsenale/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/dnviti/arsenale/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/dnviti/arsenale/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/dnviti/arsenale/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/dnviti/arsenale/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/dnviti/arsenale/compare/v1.3.0...v1.3.1
