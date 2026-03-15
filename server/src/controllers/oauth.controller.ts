@@ -13,6 +13,8 @@ import { setRefreshTokenCookie, setCsrfCookie } from '../utils/cookie';
 import { getClientIp } from '../utils/ip';
 import { enforceIpAllowlist } from '../utils/ipAllowlist';
 import { getRequestBinding } from '../utils/tokenBinding';
+import { generateAuthCode, consumeAuthCode } from '../utils/authCodeStore';
+import { generateLinkCode, consumeLinkCode } from '../utils/linkCodeStore';
 import type { VaultSetupInput } from '../schemas/oauth.schemas';
 
 type OAuthProvider = 'google' | 'microsoft' | 'github' | 'oidc';
@@ -105,10 +107,11 @@ export function handleCallback(req: Request, res: Response, next: NextFunction) 
       setRefreshTokenCookie(res, tokens.refreshToken);
       const csrfToken = setCsrfCookie(res);
 
-      const params = new URLSearchParams({
+      // Use a short-lived one-time code instead of putting tokens in the URL
+      const code = generateAuthCode({
         accessToken: tokens.accessToken,
         csrfToken,
-        needsVaultSetup: String(!result.user.vaultSetupComplete),
+        needsVaultSetup: !result.user.vaultSetupComplete,
         userId: result.user.id,
         email: result.user.email,
         username: result.user.username || '',
@@ -117,7 +120,7 @@ export function handleCallback(req: Request, res: Response, next: NextFunction) 
         tenantRole: tokens.user.tenantRole || '',
       });
 
-      res.redirect(`${config.clientUrl}/oauth/callback?${params.toString()}`);
+      res.redirect(`${config.clientUrl}/oauth/callback?code=${code}`);
     } catch (error) {
       logger.error('OAuth callback error:', error);
       let errorCode = 'authentication_failed';
@@ -130,28 +133,38 @@ export function handleCallback(req: Request, res: Response, next: NextFunction) 
 }
 
 export function getAvailableProviders(_req: Request, res: Response) {
-  res.json({
-    google: config.oauth.google.enabled,
-    microsoft: config.oauth.microsoft.enabled,
-    github: config.oauth.github.enabled,
-    oidc: config.oauth.oidc.enabled,
-    oidcProviderName: config.oauth.oidc.providerName,
-    saml: config.oauth.saml.enabled,
-    samlProviderName: config.oauth.saml.providerName,
-    ldap: config.ldap.enabled && !!config.ldap.serverUrl,
-    ldapProviderName: config.ldap.providerName,
-  });
+  const providers: Record<string, boolean> = {};
+  if (config.oauth.google.enabled) providers.google = true;
+  if (config.oauth.microsoft.enabled) providers.microsoft = true;
+  if (config.oauth.github.enabled) providers.github = true;
+  if (config.oauth.oidc.enabled) providers.oidc = true;
+  if (config.oauth.saml.enabled) providers.saml = true;
+  if (config.ldap.enabled && !!config.ldap.serverUrl) providers.ldap = true;
+  res.json(providers);
 }
 
 export function initiateLinkOAuth(req: Request, res: Response, next: NextFunction) {
-  const token = req.query.token as string;
-  if (!token) return next(new AppError('Missing token', 401));
+  // Accept a one-time link code (preferred) to avoid JWTs in URL params.
+  // Falls back to Authorization header, then query param token for backward compat.
+  let userId: string | undefined;
 
-  let payload: AuthPayload;
-  try {
-    payload = verifyJwt<AuthPayload>(token);
-  } catch {
-    return next(new AppError('Invalid token', 401));
+  const linkCode = req.query.code as string | undefined;
+  if (linkCode) {
+    const resolved = consumeLinkCode(linkCode);
+    if (!resolved) return next(new AppError('Invalid or expired link code', 401));
+    userId = resolved;
+  } else {
+    const authHeader = req.headers.authorization;
+    const token = (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined)
+      || req.query.token as string;
+    if (!token) return next(new AppError('Missing authentication', 401));
+
+    try {
+      const payload = verifyJwt<AuthPayload>(token);
+      userId = payload.userId;
+    } catch {
+      return next(new AppError('Invalid token', 401));
+    }
   }
 
   const provider = req.params.provider as string;
@@ -161,7 +174,7 @@ export function initiateLinkOAuth(req: Request, res: Response, next: NextFunctio
 
   const state = Buffer.from(JSON.stringify({
     action: 'link',
-    userId: payload.userId,
+    userId,
   })).toString('base64url');
 
   passport.authenticate(provider, {
@@ -169,6 +182,31 @@ export function initiateLinkOAuth(req: Request, res: Response, next: NextFunctio
     session: false,
     state,
   })(req, res, next);
+}
+
+/**
+ * Generate a short-lived one-time code for account linking.
+ * The client calls this via Axios (with Authorization header),
+ * then redirects to the link endpoint with ?code=... instead of ?token=...
+ */
+export function generateLinkCodeEndpoint(req: AuthRequest, res: Response) {
+  assertAuthenticated(req);
+  const code = generateLinkCode(req.user.userId);
+  res.json({ code });
+}
+
+export function exchangeCode(req: Request, res: Response, next: NextFunction) {
+  const { code } = req.body as { code?: string };
+  if (!code || typeof code !== 'string') {
+    return next(new AppError('Missing authorization code', 400));
+  }
+
+  const data = consumeAuthCode(code);
+  if (!data) {
+    return next(new AppError('Invalid or expired authorization code', 400));
+  }
+
+  res.json(data);
 }
 
 export async function unlinkOAuth(req: AuthRequest, res: Response) {

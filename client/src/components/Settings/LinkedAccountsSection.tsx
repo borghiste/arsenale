@@ -79,12 +79,7 @@ export default function LinkedAccountsSection({ hasPassword }: LinkedAccountsSec
   const linkedProviders = new Set(accounts.map((a) => a.provider));
   const totalAuthMethods = accounts.length + (hasPassword ? 1 : 0);
 
-  // Compute labels with dynamic OIDC/SAML provider names
-  const labels: Record<string, string> = {
-    ...providerLabels,
-    ...(providers?.oidcProviderName ? { OIDC: providers.oidcProviderName } : {}),
-    ...(providers?.samlProviderName ? { SAML: providers.samlProviderName } : {}),
-  };
+  const labels: Record<string, string> = { ...providerLabels };
 
   const handleUnlink = async (provider: string) => {
     setError('');
@@ -95,6 +90,19 @@ export default function LinkedAccountsSection({ hasPassword }: LinkedAccountsSec
       setSuccess(`${labels[provider] ?? provider} account unlinked`);
     } catch (err: unknown) {
       setError(extractApiError(err, 'Failed to unlink account'));
+    }
+  };
+
+  const handleLink = async (provider: string) => {
+    setError('');
+    try {
+      if (provider === 'SAML') {
+        await initiateSamlLink();
+      } else {
+        await initiateOAuthLink(provider.toLowerCase());
+      }
+    } catch (err: unknown) {
+      setError(extractApiError(err, 'Failed to initiate account linking'));
     }
   };
 
@@ -154,7 +162,7 @@ export default function LinkedAccountsSection({ hasPassword }: LinkedAccountsSec
                 key={provider}
                 variant="outlined"
                 startIcon={providerIcons[provider]}
-                onClick={() => provider === 'SAML' ? initiateSamlLink() : initiateOAuthLink(provider.toLowerCase())}
+                onClick={() => handleLink(provider)}
               >
                 Link {labels[provider]}
               </Button>
