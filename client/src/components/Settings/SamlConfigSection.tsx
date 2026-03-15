@@ -7,7 +7,7 @@ import {
   Security as SecurityIcon,
   OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
-import { getOAuthProviders } from '../../api/oauth.api';
+import { getAuthProviderDetails } from '../../api/admin.api';
 import { extractApiError } from '../../utils/apiError';
 
 export default function SamlConfigSection() {
@@ -17,11 +17,12 @@ export default function SamlConfigSection() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    getOAuthProviders()
+    getAuthProviderDetails()
       .then((providers) => {
-        setEnabled(!!providers.saml);
-        if (providers.samlProviderName) {
-          setProviderName(providers.samlProviderName);
+        const saml = providers.find((p) => p.key === 'saml');
+        setEnabled(!!saml?.enabled);
+        if (saml?.providerName) {
+          setProviderName(saml.providerName);
         }
       })
       .catch((err: unknown) => {

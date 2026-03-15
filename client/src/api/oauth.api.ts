@@ -1,15 +1,12 @@
 import api from './client';
 
 export interface OAuthProviders {
-  google: boolean;
-  microsoft: boolean;
-  github: boolean;
+  google?: boolean;
+  microsoft?: boolean;
+  github?: boolean;
   oidc?: boolean;
-  oidcProviderName?: string;
   saml?: boolean;
-  samlProviderName?: string;
   ldap?: boolean;
-  ldapProviderName?: string;
 }
 
 export interface LinkedAccount {
