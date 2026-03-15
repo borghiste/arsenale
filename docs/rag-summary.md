@@ -118,6 +118,8 @@ Authentication uses a 256-bit token (stored encrypted with AES-256-GCM + SHA-256
 
 The Gateway model includes tunnel fields: `tunnelEnabled`, encrypted token (ciphertext/IV/tag), `tunnelTokenHash` (unique), connection timestamps, client IP/version, and optional mTLS certificate material (`tunnelCaCert`, `tunnelCaKey`, `tunnelClientCert`, `tunnelClientCertExp`). `ManagedGatewayInstance` includes `tunnelProxyHost`/`tunnelProxyPort` for GUACD tunnel proxying.
 
+The Tenant model includes tunnel configuration fields: `tunnelDefaultEnabled` (new gateways default to tunnel mode), `tunnelAutoTokenRotation` + `tunnelTokenRotationDays` (scheduled token rotation), `tunnelRequireForRemote` (force tunnel for non-LAN connections), `tunnelTokenMaxLifetimeDays` (max token lifetime), and `tunnelAgentAllowedCidrs` (CIDR allowlist for agent source IPs).
+
 Audit actions `TUNNEL_CONNECT`, `TUNNEL_DISCONNECT`, `TUNNEL_TOKEN_GENERATE`, and `TUNNEL_TOKEN_ROTATE` are recorded for all tunnel lifecycle events.
 
 The `GatewayData` API type exposes `tunnelEnabled`, `tunnelConnected` (live registry check), `tunnelConnectedAt`, and `tunnelClientCertExp`. The client `gateway.api.ts` provides `generateTunnelToken`, `revokeTunnelToken`, `forceDisconnectTunnel`, `getTunnelEvents`, and `getTunnelMetrics` functions. The `gatewayStore` holds a `tunnelStatuses` map updated via `applyTunnelStatusUpdate` and `tunnel:metrics` Socket.IO events.
@@ -178,4 +180,4 @@ Configuration is handled through a single environment file with sensible default
 
 ## Technology
 
-Arsenale is built on a modern open-source stack: a Node.js and TypeScript server with a layered Express architecture backed by PostgreSQL through Prisma ORM, and a React client with Zustand state management and Material UI components. Remote desktop rendering uses the Guacamole protocol via guacamole-lite and guacamole-common-js. SSH terminals use XTerm.js with the ssh2 library. Real-time communication uses Socket.IO for terminal I/O, notifications, and monitoring updates.
+Arsenale is built on a modern open-source stack: a Node.js and TypeScript server with a layered Express architecture backed by PostgreSQL through Prisma ORM, and a React client with Zustand state management and Material UI components. The monorepo includes three workspaces: `server/`, `client/`, and `tunnel-agent/`. Remote desktop rendering uses the Guacamole protocol via guacamole-lite and guacamole-common-js. SSH terminals use XTerm.js with the ssh2 library. Real-time communication uses Socket.IO for terminal I/O, notifications, and monitoring updates. The zero-trust tunnel system uses raw `ws` WebSocket connections with a custom binary multiplexing protocol for proxying TCP streams through outbound-only gateway agent connections. The ABAC policy engine evaluates `AccessPolicy` Prisma records at session start time to enforce time-window, trusted-device, and MFA step-up constraints.
