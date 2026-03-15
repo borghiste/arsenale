@@ -67,8 +67,10 @@ if (config.logHttpRequests) app.use(requestLogger);
 // Global CSRF validation for all state-changing requests (after CORS, before routes)
 app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
-  const publicPrefixes = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/reset-password', '/auth/verify-email', '/auth/verify-totp', '/auth/request-sms-code', '/auth/verify-sms', '/auth/request-webauthn-options', '/auth/verify-webauthn', '/auth/mfa-setup/', '/auth/resend-verification', '/auth/saml', '/auth/config', '/share'];
-  if (publicPrefixes.some(p => req.path.startsWith(p))) return next();
+  const csrfExemptPaths = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/reset-password', '/auth/verify-email', '/auth/verify-totp', '/auth/request-sms-code', '/auth/verify-sms', '/auth/request-webauthn-options', '/auth/verify-webauthn', '/auth/mfa-setup/', '/auth/resend-verification', '/auth/saml', '/auth/config', '/share'];
+  // Use exact match or subpath match (path + '/') to prevent prefix collisions
+  // e.g., '/auth/login' must not exempt '/auth/login-history'
+  if (csrfExemptPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
   return validateCsrf(req, res, next);
 });
 
