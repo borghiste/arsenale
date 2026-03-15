@@ -36,6 +36,8 @@ import TenantAuditLogSection from '../Settings/TenantAuditLogSection';
 import LdapConfigSection from '../Settings/LdapConfigSection';
 import SyncProfileSection from '../Settings/SyncProfileSection';
 import TenantConnectionPolicySection from '../Settings/TenantConnectionPolicySection';
+import SamlConfigSection from '../Settings/SamlConfigSection';
+import OAuthProvidersAdminSection from '../Settings/OAuthProvidersAdminSection';
 import { SlideUp } from '../common/SlideUp';
 import { isAdminOrAbove } from '../../utils/roles';
 
@@ -214,8 +216,10 @@ export default function SettingsDialog({ open, onClose, initialTab, linkedProvid
             <Stack spacing={3}>
               <SelfSignupSection />
               <IpAllowlistSection />
+              <OAuthProvidersAdminSection />
               <EmailProviderSection />
               <LdapConfigSection />
+              <SamlConfigSection />
               <TenantAuditLogSection onViewUserProfile={onViewUserProfile} onGeoIpClick={onGeoIpClick} />
             </Stack>
           )}

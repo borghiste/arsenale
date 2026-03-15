@@ -59,6 +59,7 @@ export default function TenantSection({ onNavigateToTab, onViewUserProfile }: Te
   const [mfaError, setMfaError] = useState('');
   const [mfaConfirmOpen, setMfaConfirmOpen] = useState(false);
   const [mfaStats, setMfaStats] = useState<{ total: number; withoutMfa: number } | null>(null);
+  const [mfaDashboard, setMfaDashboard] = useState<{ total: number; withoutMfa: number } | null>(null);
   const [vaultAutoLockMax, setVaultAutoLockMax] = useState<string>('none');
   const [savingVaultLock, setSavingVaultLock] = useState(false);
   const [vaultLockError, setVaultLockError] = useState('');
@@ -132,8 +133,11 @@ export default function TenantSection({ onNavigateToTab, onViewUserProfile }: Te
       setDlpDisableDownload(tenant.dlpDisableDownload);
       setDlpDisableUpload(tenant.dlpDisableUpload);
       fetchUsers();
+      if (isAdmin) {
+        getTenantMfaStats(tenant.id).then(setMfaDashboard).catch(() => {});
+      }
     }
-  }, [tenant, fetchUsers]);
+  }, [tenant, fetchUsers, isAdmin]);
 
   const handleSaveName = async () => {
     if (!editName.trim() || editName.trim().length < 2) {
@@ -477,6 +481,26 @@ export default function TenantSection({ onNavigateToTab, onViewUserProfile }: Te
           {isAdmin && (
             <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
               <Typography variant="subtitle2" gutterBottom>Security Policy</Typography>
+              {mfaDashboard && (
+                <Box sx={{ mb: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    MFA Adoption
+                  </Typography>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <Chip
+                      label={`${mfaDashboard.total - mfaDashboard.withoutMfa} / ${mfaDashboard.total} users`}
+                      color={mfaDashboard.withoutMfa === 0 ? 'success' : 'warning'}
+                      variant="outlined"
+                      size="small"
+                    />
+                    <Typography variant="body2" color="text.secondary">
+                      {mfaDashboard.withoutMfa === 0
+                        ? 'All members have MFA configured'
+                        : `${mfaDashboard.withoutMfa} member${mfaDashboard.withoutMfa > 1 ? 's' : ''} without MFA`}
+                    </Typography>
+                  </Stack>
+                </Box>
+              )}
               {mfaError && <Alert severity="error" sx={{ mb: 1 }} onClose={() => setMfaError('')}>{mfaError}</Alert>}
               <FormControlLabel
                 control={
