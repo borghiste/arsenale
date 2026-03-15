@@ -6,7 +6,7 @@ import { config } from '../config';
 import { tcpProbe } from '../utils/tcpProbe';
 import { startMonitor, startInstanceMonitor, stopMonitor, restartMonitor } from './gatewayMonitor.service';
 import { logger } from '../utils/logger';
-import { generateTunnelToken, revokeTunnelToken, isTunnelConnected, getTunnelInfo } from './tunnel.service';
+import { generateTunnelToken, revokeTunnelToken, isTunnelConnected, deregisterTunnel, getTunnelInfo } from './tunnel.service';
 
 const log = logger.child('gateway');
 import { removeGatewayInstance } from './managedGateway.service';
@@ -621,4 +621,78 @@ export async function getTunnelOverview(tenantId: string) {
     disconnected,
     avgRttMs: rttCount > 0 ? Math.round(rttSum / rttCount) : null,
   };
+}
+
+export async function forceDisconnectTunnel(
+  tenantId: string,
+  gatewayId: string,
+): Promise<void> {
+  const existing = await prisma.gateway.findFirst({
+    where: { id: gatewayId, tenantId },
+    select: { id: true },
+  });
+  if (!existing) throw new AppError('Gateway not found', 404);
+
+  if (!isTunnelConnected(gatewayId)) {
+    throw new AppError('Tunnel is not connected', 400);
+  }
+
+  deregisterTunnel(gatewayId);
+}
+
+export async function getTunnelEvents(
+  tenantId: string,
+  gatewayId: string,
+): Promise<Array<{ action: string; timestamp: Date; details: unknown; ipAddress: string | null }>> {
+  const existing = await prisma.gateway.findFirst({
+    where: { id: gatewayId, tenantId },
+    select: { id: true },
+  });
+  if (!existing) throw new AppError('Gateway not found', 404);
+
+  const events = await prisma.auditLog.findMany({
+    where: {
+      targetId: gatewayId,
+      targetType: 'Gateway',
+      action: { in: ['TUNNEL_CONNECT', 'TUNNEL_DISCONNECT'] },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+    select: {
+      action: true,
+      createdAt: true,
+      details: true,
+      ipAddress: true,
+    },
+  });
+
+  return events.map((e: { action: string; createdAt: Date; details: unknown; ipAddress: string | null }) => {
+    // Only expose known-safe fields from audit details to prevent information leakage
+    let safeDetails: Record<string, unknown> | null = null;
+    if (e.details && typeof e.details === 'object' && !Array.isArray(e.details)) {
+      const d = e.details as Record<string, unknown>;
+      safeDetails = {};
+      if ('clientVersion' in d) safeDetails.clientVersion = String(d.clientVersion);
+      if ('forced' in d) safeDetails.forced = Boolean(d.forced);
+    }
+    return {
+      action: e.action,
+      timestamp: e.createdAt,
+      details: safeDetails,
+      ipAddress: e.ipAddress,
+    };
+  });
+}
+
+export async function getTunnelMetrics(
+  tenantId: string,
+  gatewayId: string,
+) {
+  const existing = await prisma.gateway.findFirst({
+    where: { id: gatewayId, tenantId },
+    select: { id: true },
+  });
+  if (!existing) throw new AppError('Gateway not found', 404);
+
+  return getTunnelInfo(gatewayId);
 }

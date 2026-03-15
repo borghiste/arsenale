@@ -539,6 +539,35 @@ export async function deployFromTemplate(req: AuthRequest, res: Response) {
 // Zero-trust tunnel token management
 // ---------------------------------------------------------------------------
 
+export async function forceDisconnectTunnel(req: AuthRequest, res: Response) {
+  assertTenantAuthenticated(req);
+  const gatewayId = req.params.id as string;
+  await gatewayService.forceDisconnectTunnel(req.user.tenantId, gatewayId);
+  auditService.log({
+    userId: req.user.userId,
+    action: 'TUNNEL_DISCONNECT',
+    targetType: 'Gateway',
+    targetId: gatewayId,
+    details: { forced: true },
+    ipAddress: getClientIp(req),
+  });
+  res.json({ disconnected: true });
+}
+
+export async function getTunnelEvents(req: AuthRequest, res: Response) {
+  assertTenantAuthenticated(req);
+  const gatewayId = req.params.id as string;
+  const events = await gatewayService.getTunnelEvents(req.user.tenantId, gatewayId);
+  res.json({ events });
+}
+
+export async function getTunnelMetrics(req: AuthRequest, res: Response) {
+  assertTenantAuthenticated(req);
+  const gatewayId = req.params.id as string;
+  const info = await gatewayService.getTunnelMetrics(req.user.tenantId, gatewayId);
+  res.json(info ?? { connected: false });
+}
+
 export async function generateTunnelToken(req: AuthRequest, res: Response) {
   assertTenantAuthenticated(req);
   const gatewayId = req.params.id as string;
