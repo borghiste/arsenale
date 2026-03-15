@@ -12,6 +12,7 @@ import { resolveDlpPolicy } from '../utils/dlp';
 import type { EnforcedConnectionSettings } from '../schemas/tenant.schemas';
 import * as sessionService from '../services/session.service';
 import * as auditService from '../services/audit.service';
+import * as abacService from '../services/abac.service';
 import { selectInstance } from '../services/loadBalancer.service';
 import { getDefaultGateway } from '../services/gateway.service';
 import { AppError } from '../middleware/error.middleware';
@@ -47,6 +48,25 @@ export async function createRdpSession(req: AuthRequest, res: Response, next: Ne
 
     if (conn.type !== 'RDP') {
       throw new AppError('Not an RDP connection', 400);
+    }
+
+    // ABAC policy evaluation
+    const abacResult = await abacService.evaluate({
+      userId: req.user.userId,
+      folderId: conn.folderId,
+      teamId: conn.teamId,
+      tenantId: req.user.tenantId,
+      usedWebAuthnInLogin: req.user.mfaMethod === 'webauthn',
+      completedMfaStepUp: req.user.mfaMethod != null,
+      ipAddress: getClientIp(req),
+      connectionId,
+    });
+    if (!abacResult.allowed) {
+      abacService.logAbacDenial(
+        { userId: req.user.userId, folderId: conn.folderId, teamId: conn.teamId, tenantId: req.user.tenantId, usedWebAuthnInLogin: req.user.mfaMethod === 'webauthn', completedMfaStepUp: req.user.mfaMethod != null, ipAddress: getClientIp(req), connectionId },
+        abacResult,
+      );
+      throw new AppError(`Access denied by security policy: ${abacResult.reason}`, 403);
     }
 
     // Resolve gateway: explicit > tenant default > none
@@ -268,6 +288,25 @@ export async function createVncSession(req: AuthRequest, res: Response, next: Ne
       throw new AppError('Not a VNC connection', 400);
     }
 
+    // ABAC policy evaluation
+    const vncAbacResult = await abacService.evaluate({
+      userId: req.user.userId,
+      folderId: conn.folderId,
+      teamId: conn.teamId,
+      tenantId: req.user.tenantId,
+      usedWebAuthnInLogin: req.user.mfaMethod === 'webauthn',
+      completedMfaStepUp: req.user.mfaMethod != null,
+      ipAddress: getClientIp(req),
+      connectionId,
+    });
+    if (!vncAbacResult.allowed) {
+      abacService.logAbacDenial(
+        { userId: req.user.userId, folderId: conn.folderId, teamId: conn.teamId, tenantId: req.user.tenantId, usedWebAuthnInLogin: req.user.mfaMethod === 'webauthn', completedMfaStepUp: req.user.mfaMethod != null, ipAddress: getClientIp(req), connectionId },
+        vncAbacResult,
+      );
+      throw new AppError(`Access denied by security policy: ${vncAbacResult.reason}`, 403);
+    }
+
     // Resolve gateway: explicit > tenant default > none
     const gateway = conn.gateway
       ?? (req.user.tenantId ? await getDefaultGateway(req.user.tenantId, 'GUACD') : null);
@@ -429,6 +468,25 @@ export async function validateSshAccess(req: AuthRequest, res: Response) {
 
   if (conn.type !== 'SSH') {
     throw new AppError('Not an SSH connection', 400);
+  }
+
+  // ABAC policy evaluation
+  const sshAbacResult = await abacService.evaluate({
+    userId: req.user.userId,
+    folderId: conn.folderId,
+    teamId: conn.teamId,
+    tenantId: req.user.tenantId,
+    usedWebAuthnInLogin: req.user.mfaMethod === 'webauthn',
+    completedMfaStepUp: req.user.mfaMethod != null,
+    ipAddress: getClientIp(req),
+    connectionId,
+  });
+  if (!sshAbacResult.allowed) {
+    abacService.logAbacDenial(
+      { userId: req.user.userId, folderId: conn.folderId, teamId: conn.teamId, tenantId: req.user.tenantId, usedWebAuthnInLogin: req.user.mfaMethod === 'webauthn', completedMfaStepUp: req.user.mfaMethod != null, ipAddress: getClientIp(req), connectionId },
+      sshAbacResult,
+    );
+    throw new AppError(`Access denied by security policy: ${sshAbacResult.reason}`, 403);
   }
 
   // SSH sessions are handled via Socket.io, we just validate access here
