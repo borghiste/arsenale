@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Account } from '../types';
+import { KeychainPage } from './pages/KeychainPage';
 
 interface TabPanelProps {
   tab: 'keychain' | 'connections';
@@ -18,18 +19,7 @@ export function TabPanel({ tab, account }: TabPanelProps): React.ReactElement {
   if (tab === 'keychain') {
     return (
       <div className="tab-panel">
-        <div className="tab-placeholder-section">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <circle cx="12" cy="10" r="3" />
-            <path d="M12 13v8" />
-            <path d="M9 18h6" />
-          </svg>
-          <h3>Keychain</h3>
-          <p>
-            Browse and autofill credentials stored in your Arsenale vault.
-          </p>
-          <span className="coming-soon">Coming soon</span>
-        </div>
+        <KeychainPage account={account} />
       </div>
     );
   }

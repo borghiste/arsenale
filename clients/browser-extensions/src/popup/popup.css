@@ -637,3 +637,333 @@
   margin-left: auto;
   font-size: 11px;
 }
+
+/* ── Keychain Page ─── */
+
+.keychain-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
+
+.keychain-loading,
+.keychain-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ── Vault Unlock Form ─── */
+
+.vault-unlock-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vault-unlock-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.vault-unlock-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.vault-unlock-header p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.vault-unlock-form form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Secret Search ─── */
+
+.secret-search {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.secret-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.secret-search-input {
+  padding-left: 30px !important;
+  font-size: 12px !important;
+}
+
+/* ── Secret Filters ─── */
+
+.secret-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+.secret-filter-select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+  appearance: auto;
+}
+
+.secret-filter-select:focus {
+  border-color: var(--accent);
+}
+
+.secret-fav-toggle {
+  flex-shrink: 0;
+}
+
+.secret-fav-toggle.active {
+  color: var(--accent);
+}
+
+/* ── Secret List ─── */
+
+.secret-list-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.secret-list-loading,
+.secret-list-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 24px 16px;
+}
+
+.secret-list-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.secret-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.secret-list-item {
+  display: block;
+}
+
+.secret-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 100ms;
+  color: var(--text-primary);
+  text-align: left;
+  font-size: 13px;
+}
+
+.secret-list-row:hover {
+  background: var(--surface);
+}
+
+.secret-type-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--surface-light);
+  color: var(--text-secondary);
+}
+
+.secret-list-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.secret-list-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.secret-list-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.secret-fav-star {
+  flex-shrink: 0;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+}
+
+/* ── Secret Detail ─── */
+
+.secret-detail-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.secret-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.secret-detail-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.secret-detail-title h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.secret-detail-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.secret-detail-loading,
+.secret-detail-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.secret-detail-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* ── Secret Field (copiable row) ─── */
+
+.secret-field {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.secret-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.secret-field-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.secret-field-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.secret-field-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  word-break: break-all;
+  font-family: monospace;
+  line-height: 1.4;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+/* ── Secret Tags ─── */
+
+.secret-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.secret-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  background: rgba(0, 229, 160, 0.08);
+  color: var(--accent-dim);
+  border-radius: 20px;
+}

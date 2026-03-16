@@ -111,3 +111,124 @@ export interface LoginMfaSetupRequired {
 
 /** Union type for all possible /api/auth/login responses. */
 export type LoginResponse = LoginResult | LoginMfaRequired | LoginMfaSetupRequired;
+
+// ── Vault & Secrets types ────────────────────────────────────────────
+
+/** Vault status response from GET /api/vault/status. */
+export interface VaultStatusResponse {
+  unlocked: boolean;
+  mfaUnlockAvailable: boolean;
+  mfaUnlockMethods: string[];
+}
+
+/** Secret type enum matching server model. */
+export type SecretType = 'LOGIN' | 'SSH_KEY' | 'CERTIFICATE' | 'API_KEY' | 'SECURE_NOTE';
+
+/** Secret scope enum. */
+export type SecretScope = 'PERSONAL' | 'TEAM' | 'TENANT';
+
+/** Secret list item returned by GET /api/secrets. */
+export interface SecretListItem {
+  id: string;
+  name: string;
+  description: string | null;
+  type: SecretType;
+  scope: SecretScope;
+  teamId: string | null;
+  tenantId: string | null;
+  folderId: string | null;
+  metadata: Record<string, unknown> | null;
+  tags: string[];
+  isFavorite: boolean;
+  expiresAt: string | null;
+  currentVersion: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Discriminated union for decrypted secret payload. */
+export interface LoginData {
+  type: 'LOGIN';
+  username: string;
+  password: string;
+  domain?: string;
+  url?: string;
+  notes?: string;
+}
+
+export interface SshKeyData {
+  type: 'SSH_KEY';
+  username?: string;
+  privateKey: string;
+  publicKey?: string;
+  passphrase?: string;
+  algorithm?: string;
+  notes?: string;
+}
+
+export interface CertificateData {
+  type: 'CERTIFICATE';
+  certificate: string;
+  privateKey: string;
+  chain?: string;
+  passphrase?: string;
+  expiresAt?: string;
+  notes?: string;
+}
+
+export interface ApiKeyData {
+  type: 'API_KEY';
+  apiKey: string;
+  endpoint?: string;
+  headers?: Record<string, string>;
+  notes?: string;
+}
+
+export interface SecureNoteData {
+  type: 'SECURE_NOTE';
+  content: string;
+}
+
+export type SecretPayload =
+  | LoginData
+  | SshKeyData
+  | CertificateData
+  | ApiKeyData
+  | SecureNoteData;
+
+/** Full secret detail returned by GET /api/secrets/:id. */
+export interface SecretDetail extends SecretListItem {
+  data: SecretPayload;
+  shared?: boolean;
+  permission?: 'READ_ONLY' | 'FULL_ACCESS';
+}
+
+/** Filters for listing secrets. */
+export interface SecretListFilters {
+  scope?: SecretScope;
+  type?: SecretType;
+  folderId?: string | null;
+  search?: string;
+  tags?: string[];
+  isFavorite?: boolean;
+}
+
+/** Vault folder data returned by GET /api/vault-folders. */
+export interface VaultFolderData {
+  id: string;
+  name: string;
+  parentId: string | null;
+  scope: 'PERSONAL' | 'TEAM' | 'TENANT';
+  sortOrder: number;
+  userId: string;
+  teamId: string | null;
+  tenantId: string | null;
+  teamName?: string | null;
+}
+
+/** Vault folders grouped by scope. */
+export interface VaultFoldersResponse {
+  personal: VaultFolderData[];
+  team: VaultFolderData[];
+  tenant: VaultFolderData[];
+}

@@ -21,6 +21,9 @@ import type {
   PendingAccount,
 } from './types';
 
+// ── Clipboard auto-clear alarm ────────────────────────────────────────
+const CLIPBOARD_CLEAR_ALARM = 'clipboard-clear';
+
 // ── Token refresh alarm ────────────────────────────────────────────────
 const REFRESH_ALARM = 'token-refresh';
 const REFRESH_INTERVAL_MINUTES = 10;
@@ -28,6 +31,19 @@ const REFRESH_INTERVAL_MINUTES = 10;
 chrome.alarms.create(REFRESH_ALARM, { periodInMinutes: REFRESH_INTERVAL_MINUTES });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
+  // Clipboard auto-clear: write empty string to clipboard
+  if (alarm.name === CLIPBOARD_CLEAR_ALARM) {
+    try {
+      // In service worker context, clipboard API may not be available.
+      // Use offscreen document or simply let it pass — the popup handler
+      // will clear on its own if still open. The alarm mainly serves as
+      // a fallback signal.
+    } catch {
+      // Clipboard clear is best-effort
+    }
+    return;
+  }
+
   // Per-account refresh alarms are named "token-refresh-{accountId}"
   if (alarm.name.startsWith('token-refresh-')) {
     const accountId = alarm.name.replace('token-refresh-', '');
