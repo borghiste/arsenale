@@ -52,6 +52,29 @@ export default defineConfig({
             purpose: 'maskable',
           },
         ],
+        shortcuts: [
+          {
+            name: 'New Connection',
+            short_name: 'New Conn',
+            description: 'Create a new SSH, RDP, or VNC connection',
+            url: '/?action=new-connection',
+            icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+          },
+          {
+            name: 'Open Keychain',
+            short_name: 'Keychain',
+            description: 'Open the credential keychain and secrets manager',
+            url: '/?action=open-keychain',
+            icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+          },
+          {
+            name: 'Open Settings',
+            short_name: 'Settings',
+            description: 'Open application settings and preferences',
+            url: '/?action=open-settings',
+            icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+          },
+        ],
       },
       workbox: {
         // Only cache static assets — never cache API calls or WebSocket connections
